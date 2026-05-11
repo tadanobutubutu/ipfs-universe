@@ -395,7 +395,6 @@ window.addEventListener('resize', () => {
 });
 
 // ─── Gateway latency probe ────────────────────────────────────────────────────
-// Fetches a known tiny CID from a public IPFS gateway and measures real latency.
 const PROBE_CID = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
 const GATEWAYS  = [
   'https://cloudflare-ipfs.com',
@@ -430,7 +429,6 @@ async function probeGateway() {
   }
 }
 
-// Probe immediately, then every 15s
 probeGateway();
 setInterval(probeGateway, 15000);
 
@@ -466,19 +464,16 @@ window.connectWallet = async function() {
   }
 };
 
-// ─── Helia (helia/http — browser-compatible, no libp2p needed) ───────────────
-// @helia/http uses HTTP gateways under the hood — works in any browser,
-// no WebRTC or libp2p required, no CORS issues with public gateways.
+// ─── Helia (unpkg CDN — no esm.sh to avoid Brave Safe Browsing false positive)
 window.startHeliaNode = async function() {
   const btn = document.getElementById('btn-helia');
   btn.textContent = '◎ Starting…';
   btn.disabled    = true;
-  log('Loading @helia/http via CDN…', 'info');
+  log('Loading @helia/http via unpkg…', 'info');
 
   try {
-    // Dynamic import from esm.sh (ships browser-ready ESM bundles)
-    const { createHeliaHTTP } = await import('https://esm.sh/@helia/http@1');
-    const { unixfs }          = await import('https://esm.sh/@helia/unixfs@3');
+    const { createHeliaHTTP } = await import('https://unpkg.com/@helia/http@1?module');
+    const { unixfs }          = await import('https://unpkg.com/@helia/unixfs@3?module');
 
     log('@helia/http loaded — creating node…', 'info');
     const helia = await createHeliaHTTP();
@@ -488,21 +483,19 @@ window.startHeliaNode = async function() {
     btn.className   = 'btn running';
     btn.disabled    = false;
 
-    // Resolve the same CID we probe — now via Helia
     const cid = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
     log(`Helia: fetching ${cid.slice(0,20)}…`, 'info');
-    statPeers.textContent = '1'; // helia/http = 1 gateway connection
+    statPeers.textContent = '1';
 
     let bytes = 0;
     for await (const chunk of fs.cat(cid)) {
       bytes += chunk.length;
-      if (bytes > 512) break; // just need the first block
+      if (bytes > 512) break;
     }
     blocksFetched++;
     statBlocks.textContent = blocksFetched.toLocaleString();
     log(`Helia: ${bytes} bytes fetched via UnixFS ✓`, 'ok');
 
-    // Poll gateway count every 30s (helia/http exposes getGateways)
     setInterval(() => {
       try {
         const gws = helia.routing?.getGateways?.() ?? [];
@@ -519,12 +512,11 @@ window.startHeliaNode = async function() {
   }
 };
 
-log('IPFS Universe v0.2.0 — Step 2: Helia HTTP', 'info');
+log('IPFS Universe v0.2.1 — esm.sh → unpkg', 'info');
 log(`Renderer: ${useWebGPU ? 'WebGPU' : 'WebGL'} | Particles: ${NODE_COUNT}`, useWebGPU ? 'ok' : 'warn');
 </script>
 
 <script>
-// IndexedDB peer cache (real — used by Helia internally too)
 (function() {
   if (typeof SharedArrayBuffer !== 'undefined') {
     console.info('[SharedArrayBuffer] Available — Cross-Origin-Isolation headers present');
