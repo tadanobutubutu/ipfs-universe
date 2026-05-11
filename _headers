@@ -1,0 +1,30 @@
+/*
+  # Strict security headers — applied to every response
+
+  # Prevent clickjacking
+  X-Frame-Options: DENY
+
+  # Stop MIME-type sniffing
+  X-Content-Type-Options: nosniff
+
+  # Force HTTPS for 1 year (includeSubDomains)
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+  # Disable Referrer leakage to third-parties
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # Permissions Policy — disable unused browser APIs
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()
+
+  # Content-Security-Policy
+  # - default-src 'self'                          : block everything not listed below
+  # - script-src 'self' 'unsafe-inline' cdn.jsdelivr.net fonts.googleapis.com
+  #     unsafe-inline is needed for inline <script type="module"> + importmap
+  # - style-src 'self' 'unsafe-inline' fonts.googleapis.com
+  # - font-src fonts.gstatic.com
+  # - connect-src: only the 4 IPFS gateways we actually probe
+  # - img-src 'self' data:
+  # - object-src 'none'   : no Flash/plugins
+  # - base-uri 'self'     : prevent base tag injection
+  # - form-action 'self'  : prevent form hijacking
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://ipfs.io https://dweb.link https://trustless-gateway.link https://w3s.link; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';
