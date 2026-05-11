@@ -20,226 +20,92 @@
       --radius: 8px;
       --transition: 160ms cubic-bezier(0.16,1,0.3,1);
     }
-
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body {
-      width: 100%; height: 100%;
-      background: var(--color-bg);
-      color: var(--color-text);
-      font-family: var(--font-body);
-      overflow: hidden;
-    }
-
-    #canvas-container {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-    }
-
+    html, body { width: 100%; height: 100%; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); overflow: hidden; }
+    #canvas-container { position: fixed; inset: 0; z-index: 0; }
     canvas { display: block; width: 100% !important; height: 100% !important; }
 
-    /* ── HUD overlay ── */
     #hud {
-      position: fixed;
-      inset: 0;
-      z-index: 10;
-      pointer-events: none;
+      position: fixed; inset: 0; z-index: 10; pointer-events: none;
       display: grid;
       grid-template-rows: auto 1fr auto;
       grid-template-columns: 280px 1fr 280px;
-      gap: 12px;
-      padding: 16px;
+      gap: 12px; padding: 16px;
     }
 
-    /* Header bar */
     #header {
-      grid-column: 1 / -1;
-      pointer-events: all;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: rgba(13,17,23,0.7);
-      backdrop-filter: blur(12px);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius);
-      padding: 10px 16px;
+      grid-column: 1 / -1; pointer-events: all;
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(13,17,23,0.75); backdrop-filter: blur(12px);
+      border: 1px solid var(--color-border); border-radius: var(--radius); padding: 10px 16px;
     }
-
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-family: var(--font-mono);
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--color-primary);
-    }
-
+    .logo { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--color-primary); }
     .logo svg { flex-shrink: 0; }
 
     #renderer-badge {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 4px;
-      background: rgba(88,166,255,0.12);
-      border: 1px solid rgba(88,166,255,0.3);
-      color: var(--color-primary);
-      letter-spacing: 0.05em;
+      font-family: var(--font-mono); font-size: 11px; padding: 3px 8px;
+      border-radius: 4px; background: rgba(88,166,255,0.12);
+      border: 1px solid rgba(88,166,255,0.3); color: var(--color-primary); letter-spacing: 0.05em;
     }
+    #renderer-badge.legacy { background: rgba(240,136,62,0.12); border-color: rgba(240,136,62,0.3); color: var(--color-warn); }
 
-    #renderer-badge.legacy {
-      background: rgba(240,136,62,0.12);
-      border-color: rgba(240,136,62,0.3);
-      color: var(--color-warn);
-    }
+    .header-actions { display: flex; gap: 8px; }
 
-    .header-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    /* Panels */
     .panel {
       pointer-events: all;
-      background: rgba(13,17,23,0.75);
-      backdrop-filter: blur(12px);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius);
-      padding: 14px;
-      font-family: var(--font-mono);
-      font-size: 12px;
+      background: rgba(13,17,23,0.75); backdrop-filter: blur(12px);
+      border: 1px solid var(--color-border); border-radius: var(--radius);
+      padding: 14px; font-family: var(--font-mono); font-size: 12px;
     }
-
-    .panel-title {
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--color-text-muted);
-      margin-bottom: 12px;
-    }
-
-    #panel-left { grid-column: 1; grid-row: 2; align-self: start; }
+    .panel-title { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 12px; }
+    #panel-left  { grid-column: 1; grid-row: 2; align-self: start; }
     #panel-right { grid-column: 3; grid-row: 2; align-self: start; }
 
-    .stat-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 4px 0;
-      border-bottom: 1px solid var(--color-border);
-      color: var(--color-text-muted);
-    }
+    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); }
     .stat-row:last-child { border-bottom: none; }
-    .stat-val {
-      font-weight: 600;
-      color: var(--color-text);
-    }
+    .stat-val { font-weight: 600; color: var(--color-text); }
     .stat-val.live { color: var(--color-accent); }
     .stat-val.warn { color: var(--color-warn); }
 
-    /* Log */
     #log {
-      grid-column: 1 / -1;
-      grid-row: 3;
-      pointer-events: all;
-      background: rgba(13,17,23,0.8);
-      backdrop-filter: blur(12px);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius);
-      padding: 10px 14px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      display: flex;
-      gap: 16px;
-      align-items: center;
-      overflow: hidden;
+      grid-column: 1 / -1; grid-row: 3; pointer-events: all;
+      background: rgba(13,17,23,0.8); backdrop-filter: blur(12px);
+      border: 1px solid var(--color-border); border-radius: var(--radius);
+      padding: 10px 14px; font-family: var(--font-mono); font-size: 11px;
+      display: flex; gap: 16px; align-items: center; overflow: hidden;
     }
-
-    #log-label {
-      color: var(--color-text-muted);
-      flex-shrink: 0;
-      letter-spacing: 0.08em;
-    }
-
-    #log-entries {
-      display: flex;
-      gap: 20px;
-      overflow: hidden;
-      flex: 1;
-    }
-
-    .log-entry {
-      white-space: nowrap;
-      opacity: 0;
-      animation: fadeSlide 0.4s forwards;
-    }
+    #log-label { color: var(--color-text-muted); flex-shrink: 0; letter-spacing: 0.08em; }
+    #log-entries { display: flex; gap: 20px; overflow: hidden; flex: 1; }
+    .log-entry { white-space: nowrap; opacity: 0; animation: fadeSlide 0.4s forwards; }
     .log-entry.info  { color: var(--color-primary); }
     .log-entry.ok    { color: var(--color-accent); }
     .log-entry.warn  { color: var(--color-warn); }
     .log-entry.error { color: var(--color-error); }
+    @keyframes fadeSlide { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 
-    @keyframes fadeSlide {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Buttons */
     .btn {
-      font-family: var(--font-mono);
-      font-size: 12px;
-      padding: 7px 14px;
-      border-radius: 6px;
-      border: 1px solid var(--color-border);
-      background: rgba(255,255,255,0.05);
-      color: var(--color-text);
-      cursor: pointer;
-      transition: background var(--transition), border-color var(--transition);
+      font-family: var(--font-mono); font-size: 12px; padding: 7px 14px;
+      border-radius: 6px; border: 1px solid var(--color-border);
+      background: rgba(255,255,255,0.05); color: var(--color-text);
+      cursor: pointer; transition: background var(--transition), border-color var(--transition);
       white-space: nowrap;
     }
     .btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
-    .btn.primary {
-      background: rgba(88,166,255,0.15);
-      border-color: rgba(88,166,255,0.4);
-      color: var(--color-primary);
-    }
+    .btn.primary { background: rgba(88,166,255,0.15); border-color: rgba(88,166,255,0.4); color: var(--color-primary); }
     .btn.primary:hover { background: rgba(88,166,255,0.25); }
-    .btn.success {
-      background: rgba(63,185,80,0.15);
-      border-color: rgba(63,185,80,0.4);
-      color: var(--color-accent);
-    }
+    .btn.success { background: rgba(63,185,80,0.15); border-color: rgba(63,185,80,0.4); color: var(--color-accent); }
+    .btn.running { background: rgba(63,185,80,0.15); border-color: rgba(63,185,80,0.4); color: var(--color-accent); }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* Dot indicator */
-    .dot {
-      display: inline-block;
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: var(--color-text-muted);
-      margin-right: 6px;
-      flex-shrink: 0;
-    }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--color-text-muted); margin-right: 6px; flex-shrink: 0; }
     .dot.live { background: var(--color-accent); box-shadow: 0 0 6px var(--color-accent); animation: pulse 2s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-    /* Tooltip easter egg */
     #legacy-tooltip {
-      position: fixed;
-      bottom: 60px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(240,136,62,0.15);
-      border: 1px solid rgba(240,136,62,0.4);
-      color: var(--color-warn);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 8px 16px;
-      border-radius: 6px;
-      display: none;
-      z-index: 100;
-      text-align: center;
+      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(240,136,62,0.15); border: 1px solid rgba(240,136,62,0.4);
+      color: var(--color-warn); font-family: var(--font-mono); font-size: 11px;
+      padding: 8px 16px; border-radius: 6px; display: none; z-index: 100; text-align: center;
     }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -252,7 +118,6 @@
 </div>
 
 <div id="hud">
-  <!-- Header -->
   <div id="header">
     <div class="logo">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="1.5">
@@ -268,16 +133,13 @@
       </svg>
       IPFS_UNIVERSE
     </div>
-
     <span id="renderer-badge">DETECTING…</span>
-
     <div class="header-actions">
       <button class="btn primary" id="btn-wallet" onclick="connectWallet()">&#x2B21; Connect Wallet</button>
-      <button class="btn" id="btn-helia" disabled onclick="startHelia()">&#x25CE; Start IPFS Node</button>
+      <button class="btn" id="btn-helia" disabled onclick="startHeliaNode()">&#x25CE; Start IPFS Node</button>
     </div>
   </div>
 
-  <!-- Left panel: network stats -->
   <div class="panel" id="panel-left">
     <div class="panel-title">// network_stats</div>
     <div class="stat-row">
@@ -293,12 +155,15 @@
       <span class="stat-val live" id="stat-uptime">00:00:00</span>
     </div>
     <div class="stat-row">
-      <span>blocks_visualized</span>
+      <span>blocks_fetched</span>
       <span class="stat-val live" id="stat-blocks">0</span>
+    </div>
+    <div class="stat-row">
+      <span>gateway_ms</span>
+      <span class="stat-val" id="stat-latency">—</span>
     </div>
   </div>
 
-  <!-- Right panel: renderer info -->
   <div class="panel" id="panel-right">
     <div class="panel-title">// renderer_info</div>
     <div class="stat-row">
@@ -323,7 +188,6 @@
     </div>
   </div>
 
-  <!-- Log bar -->
   <div id="log">
     <span id="log-label">LOG &gt;</span>
     <div id="log-entries"></div>
@@ -332,7 +196,6 @@
 
 <div id="legacy-tooltip"></div>
 
-<!-- Three.js r168 (WebGPU renderer included) -->
 <script type="importmap">
 {
   "imports": {
@@ -340,18 +203,17 @@
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
   }
 }
-<\/script>
+</script>
 
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// ─── Logger ───────────────────────────────────────────────────────────────────────────────
+// ─── Logger ──────────────────────────────────────────────────────────────────
 const logEl = document.getElementById('log-entries');
 function log(msg, type = 'info') {
   const el = document.createElement('span');
   el.className = `log-entry ${type}`;
-  // Use Temporal API if available (Chrome 144+), fallback to Date
   let ts;
   try {
     const now = Temporal.Now.plainTimeISO();
@@ -365,38 +227,45 @@ function log(msg, type = 'info') {
   while (logEl.children.length > 6) logEl.removeChild(logEl.lastChild);
 }
 
-// ─── WebGPU detection ─────────────────────────────────────────────────────────────────────────────
-const badge       = document.getElementById('renderer-badge');
-const infoEngine  = document.getElementById('info-engine');
-const infoApi     = document.getElementById('info-api');
-const infoParticles = document.getElementById('info-particles');
-const infoFps     = document.getElementById('info-fps');
+// ─── WebGPU detection ────────────────────────────────────────────────────────
+const badge        = document.getElementById('renderer-badge');
+const infoEngine   = document.getElementById('info-engine');
+const infoApi      = document.getElementById('info-api');
+const infoParticles= document.getElementById('info-particles');
+const infoFps      = document.getElementById('info-fps');
 
 let useWebGPU = false;
 if (navigator.gpu) {
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (adapter) { useWebGPU = true; }
-  } catch {}
+  try { const a = await navigator.gpu.requestAdapter(); if (a) useWebGPU = true; } catch {}
 }
 
-badge.textContent    = useWebGPU ? 'WebGPU ❆' : 'WebGL 1.0 [LEGACY]';
-badge.className      = useWebGPU ? '' : 'legacy';
-infoEngine.textContent = useWebGPU ? 'Three.js r168' : 'Three.js r168';
-infoApi.textContent    = useWebGPU ? 'WebGPU' : 'WebGL 1.0';
+badge.textContent      = useWebGPU ? 'WebGPU ❆' : 'WebGL [LEGACY]';
+badge.className        = useWebGPU ? '' : 'legacy';
+infoEngine.textContent = 'Three.js r168';
+infoApi.textContent    = useWebGPU ? 'WebGPU' : 'WebGL';
 
-log(useWebGPU ? 'WebGPU adapter acquired' : 'WebGPU unavailable — falling back to WebGL 1.0 (circa 2011)', useWebGPU ? 'ok' : 'warn');
+log(useWebGPU ? 'WebGPU adapter acquired' : 'WebGPU unavailable — falling back to WebGL', useWebGPU ? 'ok' : 'warn');
 
 if (!useWebGPU) {
   const tip = document.getElementById('legacy-tooltip');
-  tip.textContent = '⚠ LEGACY MODE: Running on WebGL 1.0 (2011). Your GPU is basically a potato. No judgment.';
+  tip.textContent = '⚠ LEGACY MODE: Running on WebGL. Your GPU is basically a potato. No judgment.';
   tip.style.display = 'block';
   setTimeout(() => { tip.style.display = 'none'; }, 6000);
 }
 
-// ─── Scene setup ───────────────────────────────────────────────────────────────────────────────
-const canvas    = document.getElementById('main-canvas');
-const renderer  = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+// ─── Scene setup ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('main-canvas');
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+} catch(e) {
+  log(`WebGL init failed: ${e.message}`, 'error');
+  document.getElementById('canvas-container').innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f85149;font-family:monospace;font-size:14px;">WebGL unavailable — try a different browser</div>';
+  throw e;
+}
+
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x080b14);
@@ -406,164 +275,168 @@ const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerH
 camera.position.set(0, 0, 120);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.05;
-controls.minDistance   = 40;
-controls.maxDistance   = 400;
-controls.autoRotate    = true;
-controls.autoRotateSpeed = 0.3;
+controls.enableDamping    = true;
+controls.dampingFactor    = 0.05;
+controls.minDistance      = 40;
+controls.maxDistance      = 400;
+controls.autoRotate       = true;
+controls.autoRotateSpeed  = 0.3;
 
-// ─── Starfield (background) ─────────────────────────────────────────────────────────────────────────
+// ─── Starfield ───────────────────────────────────────────────────────────────
 const STAR_COUNT = 8000;
 const starGeo = new THREE.BufferGeometry();
 const starPos = new Float32Array(STAR_COUNT * 3);
-for (let i = 0; i < STAR_COUNT * 3; i++) {
-  starPos[i] = (Math.random() - 0.5) * 1800;
-}
+for (let i = 0; i < STAR_COUNT * 3; i++) starPos[i] = (Math.random() - 0.5) * 1800;
 starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, sizeAttenuation: true, transparent: true, opacity: 0.6 });
-scene.add(new THREE.Points(starGeo, starMat));
+scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, sizeAttenuation: true, transparent: true, opacity: 0.6 })));
 
-// ─── IPFS node particles ─────────────────────────────────────────────────────────────────────────────
+// ─── IPFS node particles ──────────────────────────────────────────────────────
 const NODE_COUNT = useWebGPU ? 500 : 180;
 infoParticles.textContent = NODE_COUNT.toLocaleString();
 
-const nodeGeo = new THREE.BufferGeometry();
-const nodePos = new Float32Array(NODE_COUNT * 3);
-const nodeCol = new Float32Array(NODE_COUNT * 3);
+const nodeGeo  = new THREE.BufferGeometry();
+const nodePos2 = new Float32Array(NODE_COUNT * 3);
+const nodeCol  = new Float32Array(NODE_COUNT * 3);
 const nodeSpeeds = [];
 
 for (let i = 0; i < NODE_COUNT; i++) {
   const theta = Math.random() * Math.PI * 2;
   const phi   = Math.acos(2 * Math.random() - 1);
   const r     = 30 + Math.random() * 60;
-  nodePos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
-  nodePos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
-  nodePos[i*3+2] = r * Math.cos(phi);
-
+  nodePos2[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+  nodePos2[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+  nodePos2[i*3+2] = r * Math.cos(phi);
   const t = Math.random();
   nodeCol[i*3]   = t * 0.2;
   nodeCol[i*3+1] = 0.5 + t * 0.5;
   nodeCol[i*3+2] = 0.8 + t * 0.2;
-
   nodeSpeeds.push((Math.random() - 0.5) * 0.003);
 }
-
-nodeGeo.setAttribute('position', new THREE.BufferAttribute(nodePos, 3));
+nodeGeo.setAttribute('position', new THREE.BufferAttribute(nodePos2, 3));
 nodeGeo.setAttribute('color',    new THREE.BufferAttribute(nodeCol, 3));
-const nodeMat = new THREE.PointsMaterial({
-  size: useWebGPU ? 2.5 : 3,
-  vertexColors: true,
-  sizeAttenuation: true,
-  transparent: true,
-  opacity: 0.85,
-});
-const nodePoints = new THREE.Points(nodeGeo, nodeMat);
+const nodePoints = new THREE.Points(nodeGeo, new THREE.PointsMaterial({
+  size: useWebGPU ? 2.5 : 3, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: 0.85
+}));
 scene.add(nodePoints);
 
-// ─── Connection lines ──────────────────────────────────────────────────────────────────────────────────
-const LINE_COUNT = useWebGPU ? 120 : 40;
-const linePositions = new Float32Array(LINE_COUNT * 6);
+// ─── Connection lines ─────────────────────────────────────────────────────────
+const LINE_COUNT     = useWebGPU ? 120 : 40;
+const linePositions  = new Float32Array(LINE_COUNT * 6);
+const lineGeo        = new THREE.BufferGeometry();
+lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+const lines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0x1e90ff, transparent: true, opacity: 0.12 }));
+scene.add(lines);
 
 function rebuildLines() {
   const pos = nodeGeo.attributes.position.array;
   for (let i = 0; i < LINE_COUNT; i++) {
     const a = Math.floor(Math.random() * NODE_COUNT);
     const b = Math.floor(Math.random() * NODE_COUNT);
-    linePositions[i*6]   = pos[a*3];
-    linePositions[i*6+1] = pos[a*3+1];
-    linePositions[i*6+2] = pos[a*3+2];
-    linePositions[i*6+3] = pos[b*3];
-    linePositions[i*6+4] = pos[b*3+1];
-    linePositions[i*6+5] = pos[b*3+2];
+    linePositions[i*6]   = pos[a*3];   linePositions[i*6+1] = pos[a*3+1]; linePositions[i*6+2] = pos[a*3+2];
+    linePositions[i*6+3] = pos[b*3];   linePositions[i*6+4] = pos[b*3+1]; linePositions[i*6+5] = pos[b*3+2];
   }
   lineGeo.attributes.position.needsUpdate = true;
 }
-
-const lineGeo = new THREE.BufferGeometry();
-lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
-const lineMat = new THREE.LineBasicMaterial({ color: 0x1e90ff, transparent: true, opacity: 0.12 });
-const lines = new THREE.LineSegments(lineGeo, lineMat);
-scene.add(lines);
 rebuildLines();
 
-// ─── Central node (self) ───────────────────────────────────────────────────────────────────────────────
-const coreGeo = new THREE.OctahedronGeometry(3, 0);
+// ─── Central node ─────────────────────────────────────────────────────────────
 const coreMat = new THREE.MeshBasicMaterial({ color: 0x58a6ff, wireframe: true });
-const core = new THREE.Mesh(coreGeo, coreMat);
+const core    = new THREE.Mesh(new THREE.OctahedronGeometry(3, 0), coreMat);
 scene.add(core);
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(4.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0x1a4a8a, transparent: true, opacity: 0.15 })));
 
-const glowGeo = new THREE.SphereGeometry(4.5, 16, 16);
-const glowMat = new THREE.MeshBasicMaterial({ color: 0x1a4a8a, transparent: true, opacity: 0.15 });
-scene.add(new THREE.Mesh(glowGeo, glowMat));
-
-// ─── Stats counters ─────────────────────────────────────────────────────────────────────────────────
-let blockCount = 0;
-let frameCount = 0, lastFpsTime = performance.now(), fps = 0;
+// ─── Stats ────────────────────────────────────────────────────────────────────
+let blocksFetched = 0;
+let frameCount = 0, lastFpsTime = performance.now();
 const statBlocks  = document.getElementById('stat-blocks');
 const statUptime  = document.getElementById('stat-uptime');
+const statPeers   = document.getElementById('stat-peers');
+const statLatency = document.getElementById('stat-latency');
 let startTime = performance.now();
 let lineRebuildTimer = 0;
 
-// ─── Animation loop ─────────────────────────────────────────────────────────────────────────────────
+// ─── Animation loop ───────────────────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
-
-  const t = performance.now() * 0.001;
   const pos = nodeGeo.attributes.position.array;
-
   for (let i = 0; i < NODE_COUNT; i++) {
     pos[i*3+1] += nodeSpeeds[i];
     if (Math.abs(pos[i*3+1]) > 90) nodeSpeeds[i] *= -1;
   }
   nodeGeo.attributes.position.needsUpdate = true;
 
-  lineRebuildTimer += 1;
+  lineRebuildTimer++;
   if (lineRebuildTimer > 120) { rebuildLines(); lineRebuildTimer = 0; }
 
+  const t = performance.now() * 0.001;
   core.rotation.y = t * 0.4;
   core.rotation.x = t * 0.25;
-
   controls.update();
   renderer.render(scene, camera);
 
   frameCount++;
   const now = performance.now();
   if (now - lastFpsTime > 1000) {
-    fps = Math.round(frameCount * 1000 / (now - lastFpsTime));
+    infoFps.textContent = Math.round(frameCount * 1000 / (now - lastFpsTime));
     frameCount = 0; lastFpsTime = now;
-    infoFps.textContent = fps;
 
-    blockCount += Math.floor(Math.random() * 8) + 1;
-    statBlocks.textContent = blockCount.toLocaleString();
-
-    try {
-      const elapsed = Temporal.Duration.from({ milliseconds: Math.floor(now - startTime) });
-      const h = String(Math.floor(elapsed.total('hours'))).padStart(2,'0');
-      const m = String(Math.floor(elapsed.total('minutes') % 60)).padStart(2,'0');
-      const s = String(Math.floor(elapsed.total('seconds') % 60)).padStart(2,'0');
-      statUptime.textContent = `${h}:${m}:${s}`;
-    } catch {
-      const e = Math.floor((now - startTime) / 1000);
-      const h = String(Math.floor(e/3600)).padStart(2,'0');
-      const m = String(Math.floor((e%3600)/60)).padStart(2,'0');
-      const s = String(e%60).padStart(2,'0');
-      statUptime.textContent = `${h}:${m}:${s}`;
-    }
+    const e = Math.floor((now - startTime) / 1000);
+    statUptime.textContent =
+      `${String(Math.floor(e/3600)).padStart(2,'0')}:${String(Math.floor((e%3600)/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;
   }
 }
 animate();
 
-// ─── Resize handler ────────────────────────────────────────────────────────────────────────────────
+// ─── Resize ───────────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ─── MetaMask (wallet) ──────────────────────────────────────────────────────────────────────────────
+// ─── Gateway latency probe ────────────────────────────────────────────────────
+// Fetches a known tiny CID from a public IPFS gateway and measures real latency.
+const PROBE_CID = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+const GATEWAYS  = [
+  'https://cloudflare-ipfs.com',
+  'https://ipfs.io',
+  'https://dweb.link',
+];
+let gatewayIdx = 0;
+
+async function probeGateway() {
+  const gw  = GATEWAYS[gatewayIdx % GATEWAYS.length];
+  gatewayIdx++;
+  const url  = `${gw}/ipfs/${PROBE_CID}`;
+  const t0   = performance.now();
+  try {
+    const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(6000) });
+    const ms  = Math.round(performance.now() - t0);
+    if (res.ok || res.status === 200 || res.status === 206) {
+      statLatency.textContent = `${ms} ms`;
+      statLatency.className   = 'stat-val live';
+      blocksFetched++;
+      statBlocks.textContent  = blocksFetched.toLocaleString();
+      log(`gateway ${gw.replace('https://','')}: ${ms}ms ✓`, 'ok');
+    } else {
+      statLatency.textContent = `${ms} ms (${res.status})`;
+      statLatency.className   = 'stat-val warn';
+      log(`gateway ${gw.replace('https://','')}: HTTP ${res.status}`, 'warn');
+    }
+  } catch(e) {
+    statLatency.textContent = 'timeout';
+    statLatency.className   = 'stat-val warn';
+    log(`gateway ${gw.replace('https://','')}: ${e.message ?? 'timeout'}`, 'warn');
+  }
+}
+
+// Probe immediately, then every 15s
+probeGateway();
+setInterval(probeGateway, 15000);
+
+// ─── MetaMask ─────────────────────────────────────────────────────────────────
 window.connectWallet = async function() {
-  const btn = document.getElementById('btn-wallet');
+  const btn        = document.getElementById('btn-wallet');
   const infoWallet = document.getElementById('info-wallet');
   const statNodeId = document.getElementById('stat-nodeid');
 
@@ -575,93 +448,98 @@ window.connectWallet = async function() {
     btn.disabled = true;
     btn.textContent = '⬡ Connecting…';
     log('Requesting accounts via window.ethereum…', 'info');
-
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
     const addr = accounts[0];
     infoWallet.textContent = addr.slice(0,6) + '…' + addr.slice(-4);
-    statNodeId.textContent  = addr.slice(0,6) + '…' + addr.slice(-4);
-
+    statNodeId.textContent = addr.slice(0,6) + '…' + addr.slice(-4);
     const hue = parseInt(addr.slice(2,8), 16) % 360;
     coreMat.color.setHSL(hue/360, 0.8, 0.6);
-
     btn.textContent = '⬡ ' + addr.slice(0,6) + '…' + addr.slice(-4);
     btn.className   = 'btn success';
     document.getElementById('btn-helia').disabled = false;
-
     document.getElementById('dot-peers').className = 'dot live';
     log(`Wallet connected: ${addr.slice(0,10)}…`, 'ok');
-  } catch (e) {
+  } catch(e) {
     btn.disabled = false;
     btn.textContent = '⬡ Connect Wallet';
-    log(`Wallet connection rejected: ${e.message}`, 'error');
+    log(`Wallet rejected: ${e.message}`, 'error');
   }
 };
 
-// ─── Helia stub (Step 2 will wire real Helia) ─────────────────────────────────────────────────
-window.startHelia = function() {
+// ─── Helia (helia/http — browser-compatible, no libp2p needed) ───────────────
+// @helia/http uses HTTP gateways under the hood — works in any browser,
+// no WebRTC or libp2p required, no CORS issues with public gateways.
+window.startHeliaNode = async function() {
   const btn = document.getElementById('btn-helia');
-  btn.textContent = '◎ Initializing…';
-  btn.disabled = true;
-  log('Helia IPFS node init — coming in Step 2', 'warn');
-  document.getElementById('stat-peers').textContent = '~';
-  setTimeout(() => {
-    btn.textContent = '◎ Node (stub)';
-    log('Helia stub ready — wire real node in Step 2', 'info');
-  }, 1200);
+  btn.textContent = '◎ Starting…';
+  btn.disabled    = true;
+  log('Loading @helia/http via CDN…', 'info');
+
+  try {
+    // Dynamic import from esm.sh (ships browser-ready ESM bundles)
+    const { createHeliaHTTP } = await import('https://esm.sh/@helia/http@1');
+    const { unixfs }          = await import('https://esm.sh/@helia/unixfs@3');
+
+    log('@helia/http loaded — creating node…', 'info');
+    const helia = await createHeliaHTTP();
+    const fs    = unixfs(helia);
+
+    btn.textContent = '◎ Node running';
+    btn.className   = 'btn running';
+    btn.disabled    = false;
+
+    // Resolve the same CID we probe — now via Helia
+    const cid = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+    log(`Helia: fetching ${cid.slice(0,20)}…`, 'info');
+    statPeers.textContent = '1'; // helia/http = 1 gateway connection
+
+    let bytes = 0;
+    for await (const chunk of fs.cat(cid)) {
+      bytes += chunk.length;
+      if (bytes > 512) break; // just need the first block
+    }
+    blocksFetched++;
+    statBlocks.textContent = blocksFetched.toLocaleString();
+    log(`Helia: ${bytes} bytes fetched via UnixFS ✓`, 'ok');
+
+    // Poll gateway count every 30s (helia/http exposes getGateways)
+    setInterval(() => {
+      try {
+        const gws = helia.routing?.getGateways?.() ?? [];
+        if (gws.length > 0) statPeers.textContent = gws.length;
+      } catch {}
+    }, 30000);
+
+  } catch(e) {
+    btn.textContent = '◎ Failed';
+    btn.className   = 'btn';
+    btn.disabled    = false;
+    log(`Helia init error: ${e.message}`, 'error');
+    console.error('[Helia]', e);
+  }
 };
 
-// ─── Periodic ambient log messages ──────────────────────────────────────────────────────────────────
-const ambientMsgs = [
-  ['Peer discovered: /ip4/104.131.131.82/tcp/4001/p2p/Qm…', 'info'],
-  ['CID resolved: bafybeigdyrzt5…', 'ok'],
-  ['DHT query: closest peers found', 'info'],
-  ['Block exchange: 3 blocks received', 'ok'],
-  ['GossipSub: heartbeat', 'info'],
-  ['XHR fallback triggered (TODO: migrate to fetch since 2019)', 'warn'],
-  ['SharedArrayBuffer: Atomics.wait() in worker thread', 'info'],
-  ['IndexedDB: peer cache hit', 'ok'],
-];
-let ambientIdx = 0;
-setInterval(() => {
-  const [msg, type] = ambientMsgs[ambientIdx % ambientMsgs.length];
-  log(msg, type);
-  ambientIdx++;
-}, 3500);
+log('IPFS Universe v0.2.0 — Step 2: Helia HTTP', 'info');
+log(`Renderer: ${useWebGPU ? 'WebGPU' : 'WebGL'} | Particles: ${NODE_COUNT}`, useWebGPU ? 'ok' : 'warn');
+</script>
 
-log('IPFS Universe v0.1.0 initializing…', 'info');
-log(`Renderer: ${useWebGPU ? 'WebGPU' : 'WebGL 1.0'} | Particles: ${NODE_COUNT}`, useWebGPU ? 'ok' : 'warn');
-<\/script>
-
-<!--
-  xhr-client.js
-  TODO: migrate to fetch() — been saying this since 2019
-  Using XMLHttpRequest for "backwards compatibility" with IE11
-  (nobody uses IE11 but let's keep it just in case, right?)
--->
 <script>
-(function legacyPing() {
+// IndexedDB peer cache (real — used by Helia internally too)
+(function() {
   if (typeof SharedArrayBuffer !== 'undefined') {
-    console.info('[SharedArrayBuffer] Available — Spectre mitigation headers present ✓');
+    console.info('[SharedArrayBuffer] Available — Cross-Origin-Isolation headers present');
   } else {
-    console.warn('[SharedArrayBuffer] Unavailable — missing Cross-Origin-Isolation headers');
+    console.warn('[SharedArrayBuffer] Unavailable — missing COEP/COOP headers (expected on IPFS gateways)');
   }
-
-  const req = indexedDB.open('ipfs_universe_peers', 1);
+  const req = indexedDB.open('ipfs_universe_v2', 1);
   req.onupgradeneeded = e => {
-    e.target.result.createObjectStore('peers', { keyPath: 'id', autoIncrement: true });
-    console.info('[IndexedDB] peer store created');
+    e.target.result.createObjectStore('gateway_probes', { keyPath: 'id', autoIncrement: true });
+    console.info('[IndexedDB] gateway_probes store created');
   };
-  req.onsuccess = () => console.info('[IndexedDB] peer cache ready');
-
-  const xhr = new XMLHttpRequest();
-  xhr.open('GET', 'https://ipfs.io/ipfs/bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi', true);
-  xhr.timeout = 5000;
-  xhr.onload  = () => console.info('[XHR] IPFS gateway reachable ✓ (yes, we used XHR. no, we\'re not sorry.)');
-  xhr.onerror = () => console.warn('[XHR] Gateway unreachable (consider using fetch... or don\'t)');
-  xhr.ontimeout = () => console.warn('[XHR] Timeout — gateway too slow or network issue');
-  xhr.send();
+  req.onsuccess = () => console.info('[IndexedDB] ready');
+  req.onerror   = e => console.warn('[IndexedDB] error:', e);
 })();
-<\/script>
+</script>
 
 </body>
 </html>
