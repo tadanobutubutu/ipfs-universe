@@ -121,13 +121,15 @@ function showTooltip(x: number, y: number, data: any, persistent = false) {
   gsap.to(ttEl, { 
     opacity: 1, 
     duration: 0.3, 
-    scale: persistent ? 1.02 : 1,
-    ease: "back.out(1.7)",
+    scale: persistent ? 1.05 : 1,
+    ease: "expo.out",
     onStart: () => {
       const overlay = ttEl.querySelector('.glitch-overlay') as HTMLElement;
       if (overlay) {
-        gsap.fromTo(overlay, { opacity: 0.8 }, { opacity: 0.1, duration: 0.5, repeat: 1, yoyo: true });
+        gsap.fromTo(overlay, { opacity: 0.9 }, { opacity: 0.05, duration: 0.2, repeat: 3, yoyo: true });
       }
+      // Sound effect simulation (visual pulse)
+      gsap.to(ttEl, { x: "+=2", duration: 0.05, repeat: 5, yoyo: true });
     }
   });
   
@@ -193,10 +195,12 @@ function showTooltip(x: number, y: number, data: any, persistent = false) {
   
   if (persistent) {
     ttEl.style.borderColor = 'var(--color-accent)';
-    ttEl.style.boxShadow = '0 0 40px rgba(63, 185, 80, 0.4), inset 0 0 20px rgba(63, 185, 80, 0.1)';
+    ttEl.style.boxShadow = '0 0 50px rgba(63, 185, 80, 0.5), inset 0 0 25px rgba(63, 185, 80, 0.15)';
+    ttEl.style.background = 'rgba(4, 6, 11, 0.95)';
   } else {
     ttEl.style.borderColor = 'var(--color-primary)';
-    ttEl.style.boxShadow = '0 0 30px rgba(88, 166, 255, 0.3), inset 0 0 15px rgba(88, 166, 255, 0.05)';
+    ttEl.style.boxShadow = '0 0 30px rgba(88, 166, 255, 0.4), inset 0 0 15px rgba(88, 166, 255, 0.08)';
+    ttEl.style.background = 'rgba(4, 6, 11, 0.85)';
   }
 }
 
@@ -440,6 +444,14 @@ function setupCore() {
     new THREE.MeshBasicMaterial({ color: 0x58a6ff, wireframe: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending })
   );
   scene.add(coreAura);
+  
+  // Added: Inner core glow
+  const coreInnerGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(4, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0x58a6ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending })
+  );
+  coreMesh.add(coreInnerGlow);
+  gsap.to(coreInnerGlow.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 1.5, repeat: -1, yoyo: true, ease: "power2.inOut" });
 }
 
 function setupRings() {
@@ -547,9 +559,50 @@ function createDataPulse(peerId: string) {
           const nextPeerId = others[Math.floor(Math.random() * others.length)];
           createInterNodePulse(peerId, nextPeerId);
         }
-      }, 1100);
+      }, 1000);
     }
   }
+}
+
+function createPulseWave(peerId: string) {
+  const node = peerNodes.get(peerId);
+  if (!node) return;
+
+  const userColor = coreAura ? (coreAura.material as THREE.MeshBasicMaterial).color : new THREE.Color(0x58a6ff);
+  
+  // Create a moving wave along the line
+  const waveGeo = new THREE.SphereGeometry(1.2, 12, 12);
+  const waveMat = new THREE.MeshBasicMaterial({ 
+    color: userColor, 
+    transparent: true, 
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending 
+  });
+  const wave = new THREE.Mesh(waveGeo, waveMat);
+  scene.add(wave);
+
+  const start = new THREE.Vector3(0,0,0);
+  const end = node.targetPos;
+
+  gsap.to(wave.position, {
+    x: end.x, y: end.y, z: end.z,
+    duration: 0.8,
+    ease: "power1.in",
+    onUpdate: function() {
+      const p = this.progress();
+      const s = Math.sin(p * Math.PI) * 5 + 0.5;
+      wave.scale.set(s, s, s);
+      waveMat.opacity = 0.8 * (1 - p);
+    },
+    onComplete: () => {
+      scene.remove(wave);
+      waveGeo.dispose();
+      waveMat.dispose();
+      
+      // Node reaction on impact
+      gsap.to(node.mesh.scale, { x: 3, y: 3, z: 3, duration: 0.1, yoyo: true, repeat: 1 });
+    }
+  });
 }
 
 function createDiscoveryWave(peerId: string) {
@@ -762,6 +815,22 @@ function animate() {
       setInterval(createExpansionPulse, 1500);
       createExpansionPulse();
 
+      // NEW: Dynamic Vortex Effect
+      const vortexGeo = new THREE.TorusGeometry(15, 0.5, 16, 100);
+      const vortexMat = new THREE.MeshBasicMaterial({ 
+        color: userColor, 
+        transparent: true, 
+        opacity: 0.4, 
+        wireframe: true,
+        blending: THREE.AdditiveBlending 
+      });
+      const vortex = new THREE.Mesh(vortexGeo, vortexMat);
+      vortex.rotation.x = Math.PI / 2;
+      scene.add(vortex);
+      
+      gsap.to(vortex.rotation, { z: Math.PI * 2, duration: 1, repeat: -1, ease: "none" });
+      gsap.to(vortex.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 0.5, repeat: -1, yoyo: true, ease: "sine.inOut" });
+
       // Floating Wallet Label (3D)
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -778,17 +847,21 @@ function animate() {
         const texture = new THREE.CanvasTexture(canvas);
         const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0 });
         const sprite = new THREE.Sprite(spriteMat);
-        sprite.position.set(0, 25, 0);
-        sprite.scale.set(40, 10, 1);
+        sprite.position.set(0, 35, 0);
+        sprite.scale.set(45, 11, 1);
         scene.add(sprite);
         
         gsap.to(spriteMat, { opacity: 1, duration: 2, delay: 1 });
-        gsap.to(sprite.position, { y: 30, duration: 2, repeat: -1, yoyo: true, ease: "sine.inOut" });
+        gsap.to(sprite.position, { y: 40, duration: 2, repeat: -1, yoyo: true, ease: "sine.inOut" });
       }
     }
     
     const nodeid = document.getElementById('stat-nodeid');
-    if (nodeid) nodeid.textContent = accounts[0];
+    if (nodeid) {
+      nodeid.textContent = accounts[0];
+      nodeid.style.color = '#' + userColor.getHexString();
+      nodeid.style.textShadow = `0 0 10px #${userColor.getHexString()}`;
+    }
   } catch (e) {
     log('WALLET_AUTH: USER_REJECTED_OR_FAILED', 'error');
   }
