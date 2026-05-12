@@ -75,6 +75,56 @@ function log(msg: string, type: string = 'info') {
 // ─── Mouse Interaction
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
+let selectedPeerId: string | null = null;
+
+window.addEventListener('click', (e) => {
+  if (camera && peerGroup) {
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(peerGroup.children, false);
+    
+    let found = false;
+    for (let i = 0; i < intersects.length; i++) {
+      const obj = intersects[i].object;
+      if (obj.userData && obj.userData.peerId) {
+        selectedPeerId = obj.userData.peerId;
+        showTooltip(e.clientX, e.clientY, obj.userData, true);
+        found = true;
+        
+        // Visual feedback for selection
+        const node = peerNodes.get(selectedPeerId!);
+        if (node) {
+          gsap.to(node.mesh.scale, { x: 2.5, y: 2.5, z: 2.5, duration: 0.4, ease: 'back.out(2)' });
+        }
+        break;
+      }
+    }
+    
+    if (!found) {
+      selectedPeerId = null;
+      ttEl.style.opacity = '0';
+      // Reset all node scales
+      peerNodes.forEach(n => {
+        gsap.to(n.mesh.scale, { x: 1, y: 1, z: 1, duration: 0.3 });
+      });
+    }
+  }
+});
+
+function showTooltip(x: number, y: number, data: any, persistent = false) {
+  ttEl.style.opacity = '1';
+  ttEl.style.left = x + 'px';
+  ttEl.style.top = y + 'px';
+  ttId.textContent = data.peerId; // Full ID if possible, or just longer
+  ttLat.textContent = data.latency + 'ms';
+  
+  if (persistent) {
+    ttEl.style.borderColor = 'var(--color-accent)';
+    ttEl.style.boxShadow = '0 0 20px var(--color-accent)';
+  } else {
+    ttEl.style.borderColor = 'var(--color-primary)';
+    ttEl.style.boxShadow = '0 4px 16px rgba(88,166,255,0.2)';
+  }
+}
 
 window.addEventListener('mousemove', (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -91,8 +141,8 @@ window.addEventListener('mousemove', (e) => {
     stagger: 0.05
   });
 
-  // Raycaster intersection for Tooltip
-  if (camera && peerGroup) {
+  // Raycaster intersection for Tooltip (Hover)
+  if (camera && peerGroup && !selectedPeerId) {
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObjects(peerGroup.children, false);
     let found = false;
@@ -100,11 +150,7 @@ window.addEventListener('mousemove', (e) => {
       const obj = intersects[i].object;
       if (obj.userData && obj.userData.peerId) {
         found = true;
-        ttEl.style.opacity = '1';
-        ttEl.style.left = e.clientX + 'px';
-        ttEl.style.top = e.clientY + 'px';
-        ttId.textContent = obj.userData.peerId.substring(0, 8) + '...';
-        ttLat.textContent = obj.userData.latency + 'ms';
+        showTooltip(e.clientX, e.clientY, obj.userData);
         document.body.style.cursor = 'crosshair';
         break;
       }
@@ -202,8 +248,13 @@ function initWorker() {
       await savePeer(peerData);
       updateStoredCount();
       addPeerNode(peer.peerId, peer.latency);
-      gsap.to(coreMat, { opacity: 1, duration: 0.2, yoyo: true, repeat: 1 });
+      
+      // Dynamic core reaction
+      gsap.to(coreMat, { opacity: 1, duration: 0.1, yoyo: true, repeat: 3 });
+      gsap.to(coreAura.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 0.2, yoyo: true, repeat: 1 });
+      
       pulseNode(peer.peerId);
+      createDataPulse(peer.peerId);
     }
     if (type === 'peer_disconnected') {
       removePeerNode(peer.peerId);
@@ -316,8 +367,49 @@ function setupScene() {
       const keys = Array.from(peerNodes.keys());
       const randomId = keys[Math.floor(Math.random() * keys.length)];
       pulseNode(randomId);
+      createDataPulse(randomId);
     }
-  }, 1500);
+  }, 1000);
+}
+
+function createDataPulse(peerId: string) {
+  const node = peerNodes.get(peerId);
+  if (!node) return;
+
+  const pulseGeo = new THREE.SphereGeometry(0.8, 8, 8);
+  const pulseMat = new THREE.MeshBasicMaterial({ 
+    color: 0x58a6ff, 
+    transparent: true, 
+    opacity: 1,
+    blending: THREE.AdditiveBlending 
+  });
+  const pulse = new THREE.Mesh(pulseGeo, pulseMat);
+  scene.add(pulse);
+
+  const start = new THREE.Vector3(0, 0, 0);
+  const end = node.targetPos;
+
+  gsap.to(pulse.position, {
+    x: end.x,
+    y: end.y,
+    z: end.z,
+    duration: 1 + Math.random(),
+    ease: "power2.inOut",
+    onUpdate: () => {
+      // Scale pulse during travel
+      const dist = pulse.position.distanceTo(start);
+      const totalDist = end.length();
+      const scale = Math.sin((dist / totalDist) * Math.PI) * 2 + 0.5;
+      pulse.scale.set(scale, scale, scale);
+    },
+    onComplete: () => {
+      scene.remove(pulse);
+      pulseGeo.dispose();
+      pulseMat.dispose();
+      // Secondary pulse at node
+      gsap.to(node.mesh.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 0.2, yoyo: true, repeat: 1 });
+    }
+  });
 }
 
 // ─── Animation
@@ -381,8 +473,25 @@ function animate() {
         duration: 1.5,
         r: userColor.r, g: userColor.g, b: userColor.b,
       });
-      gsap.to(coreAura.material as THREE.MeshBasicMaterial, { opacity: 0.4, duration: 1.5 });
-      gsap.to(coreAura.scale, { x: 1.3, y: 1.3, z: 1.3, duration: 2, repeat: -1, yoyo: true, ease: 'sine.inOut' });
+      gsap.to(coreAura.material as THREE.MeshBasicMaterial, { opacity: 0.6, duration: 1.5 });
+      
+      // More dynamic aura
+      const auraTimeline = gsap.timeline({ repeat: -1 });
+      auraTimeline
+        .to(coreAura.scale, { x: 1.4, y: 1.4, z: 1.4, duration: 2, ease: 'sine.inOut' })
+        .to(coreAura.scale, { x: 1.1, y: 1.1, z: 1.1, duration: 2, ease: 'sine.inOut' });
+      
+      gsap.to(coreAura.rotation, { y: Math.PI * 2, duration: 10, repeat: -1, ease: 'none' });
+      
+      // Add a secondary pulse ring for the wallet connection
+      const pulseRingGeo = new THREE.TorusGeometry(12, 0.1, 16, 100);
+      const pulseRingMat = new THREE.MeshBasicMaterial({ color: userColor, transparent: true, opacity: 0.5 });
+      const pulseRing = new THREE.Mesh(pulseRingGeo, pulseRingMat);
+      pulseRing.rotation.x = Math.PI / 2;
+      scene.add(pulseRing);
+      
+      gsap.to(pulseRing.scale, { x: 5, y: 5, z: 5, duration: 4, repeat: -1, ease: 'power2.out' });
+      gsap.to(pulseRingMat, { opacity: 0, duration: 4, repeat: -1, ease: 'power2.out' });
     }
     
     const nodeid = document.getElementById('stat-nodeid');
