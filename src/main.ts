@@ -142,6 +142,29 @@ function showTooltip(x: number, y: number, data: any, persistent = false) {
     ttLoc.textContent = data.location || locs[Math.floor(Math.random() * locs.length)];
   }
   
+  // Traffic Simulation
+  const trafficEl = document.getElementById('tt-traffic');
+  if (trafficEl) {
+    const traffic = (Math.random() * 50 + 10).toFixed(2);
+    trafficEl.textContent = traffic + ' KB/s';
+  }
+
+  const rxBar = document.getElementById('tt-rx-bar');
+  const rxVal = document.getElementById('tt-rx-val');
+  const txBar = document.getElementById('tt-tx-bar');
+  const txVal = document.getElementById('tt-tx-val');
+  
+  if (rxBar && rxVal) {
+    const rx = Math.floor(Math.random() * 100);
+    gsap.to(rxBar, { width: rx + '%', duration: 0.5 });
+    rxVal.textContent = rx + '%';
+  }
+  if (txBar && txVal) {
+    const tx = Math.floor(Math.random() * 100);
+    gsap.to(txBar, { width: tx + '%', duration: 0.5 });
+    txVal.textContent = tx + '%';
+  }
+  
   // High-fidelity HUD additions
   const ttProtocol = document.getElementById('tt-protocol');
   const ttStability = document.getElementById('tt-stability');
@@ -295,6 +318,7 @@ function initWorker() {
       gsap.to(coreMat, { opacity: 1, duration: 0.1, yoyo: true, repeat: 3 });
       gsap.to(coreAura.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 0.2, yoyo: true, repeat: 1 });
       
+      createDiscoveryWave(peer.peerId);
       pulseNode(peer.peerId);
       createDataPulse(peer.peerId);
     }
@@ -494,7 +518,7 @@ function createDataPulse(peerId: string) {
     // 2. Wave pulse (Expanding shockwave at target)
     if (i === 0) {
       setTimeout(() => {
-        const shockGeo = new THREE.RingGeometry(0.5, 2.0, 32);
+        const shockGeo = new THREE.RingGeometry(0.5, 3.0, 32);
         const shockMat = new THREE.MeshBasicMaterial({ 
           color: userColor, 
           transparent: true, 
@@ -507,8 +531,8 @@ function createDataPulse(peerId: string) {
         shock.lookAt(new THREE.Vector3(0,0,0));
         scene.add(shock);
         
-        gsap.to(shock.scale, { x: 15, y: 15, z: 15, duration: 1.5, ease: "expo.out" });
-        gsap.to(shockMat, { opacity: 0, duration: 1.5, ease: "expo.out", onComplete: () => {
+        gsap.to(shock.scale, { x: 20, y: 20, z: 20, duration: 2.0, ease: "expo.out" });
+        gsap.to(shockMat, { opacity: 0, duration: 2.0, ease: "expo.out", onComplete: () => {
           scene.remove(shock);
           shockGeo.dispose();
           shockMat.dispose();
@@ -526,6 +550,36 @@ function createDataPulse(peerId: string) {
       }, 1100);
     }
   }
+}
+
+function createDiscoveryWave(peerId: string) {
+  const node = peerNodes.get(peerId);
+  if (!node) return;
+
+  const waveGeo = new THREE.SphereGeometry(1, 32, 32);
+  const waveMat = new THREE.MeshBasicMaterial({
+    color: 0x3fb950,
+    transparent: true,
+    opacity: 0.5,
+    wireframe: true,
+    blending: THREE.AdditiveBlending
+  });
+  const wave = new THREE.Mesh(waveGeo, waveMat);
+  scene.add(wave);
+
+  gsap.to(wave.scale, {
+    x: 300, y: 300, z: 300,
+    duration: 3,
+    ease: "power2.out",
+    onUpdate: function() {
+      waveMat.opacity = 0.5 * (1 - this.progress());
+    },
+    onComplete: () => {
+      scene.remove(wave);
+      waveGeo.dispose();
+      waveMat.dispose();
+    }
+  });
 }
 
 function createInterNodePulse(fromId: string, toId: string) {
@@ -707,6 +761,30 @@ function animate() {
       
       setInterval(createExpansionPulse, 1500);
       createExpansionPulse();
+
+      // Floating Wallet Label (3D)
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        canvas.width = 512;
+        canvas.height = 128;
+        ctx.fillStyle = 'rgba(0,0,0,0)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = 'bold 40px Orbitron';
+        ctx.fillStyle = '#' + userColor.getHexString();
+        ctx.textAlign = 'center';
+        ctx.fillText(`AUTH_NODE: ${accounts[0].slice(0, 14)}...`, 256, 60);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0 });
+        const sprite = new THREE.Sprite(spriteMat);
+        sprite.position.set(0, 25, 0);
+        sprite.scale.set(40, 10, 1);
+        scene.add(sprite);
+        
+        gsap.to(spriteMat, { opacity: 1, duration: 2, delay: 1 });
+        gsap.to(sprite.position, { y: 30, duration: 2, repeat: -1, yoyo: true, ease: "sine.inOut" });
+      }
     }
     
     const nodeid = document.getElementById('stat-nodeid');

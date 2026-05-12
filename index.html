@@ -340,6 +340,7 @@
     <div class="tooltip-row"><span class="tooltip-label">STABILITY:</span> <span id="tt-stability" class="tooltip-val" style="color: var(--color-accent)">...</span></div>
     <div class="tooltip-row"><span class="tooltip-label">ROUTING:</span> <span id="tt-path" class="tooltip-val">...</span></div>
     <div class="tooltip-row"><span class="tooltip-label">GEOLOC:</span> <span id="tt-loc" class="tooltip-val">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">TRAFFIC:</span> <span id="tt-traffic" class="tooltip-val live">0.00 KB/s</span></div>
     <div class="tooltip-row"><span class="tooltip-label">STATUS:</span> <span id="tt-status" class="tooltip-val live">...</span></div>
     
     <div class="hud-bars">
@@ -347,6 +348,23 @@
       <div class="hud-bar"><div class="hud-bar-inner" style="width: 40%"></div></div>
       <div class="hud-bar"><div class="hud-bar-inner" style="width: 90%"></div></div>
       <div class="hud-bar"><div class="hud-bar-inner" style="width: 20%"></div></div>
+    </div>
+
+    <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 4px;">
+      <div style="display: flex; justify-content: space-between; font-size: 8px; color: var(--color-text-muted);">
+        <span>RX_THROUGHPUT</span>
+        <span id="tt-rx-val">0%</span>
+      </div>
+      <div style="height: 2px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden;">
+        <div id="tt-rx-bar" style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: var(--color-accent); box-shadow: 0 0 10px var(--color-accent);"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 8px; color: var(--color-text-muted); margin-top: 4px;">
+        <span>TX_THROUGHPUT</span>
+        <span id="tt-tx-val">0%</span>
+      </div>
+      <div style="height: 2px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden;">
+        <div id="tt-tx-bar" style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary);"></div>
+      </div>
     </div>
 
     <div style="margin-top: 12px; height: 2px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden;">
