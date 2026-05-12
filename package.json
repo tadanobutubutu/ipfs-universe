@@ -1,0 +1,22 @@
+{
+  "name": "ipfs-universe",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12",
+    "vite-plugin-wasm": "^3.3.0",
+    "vite-plugin-top-level-await": "^1.4.1"
+  },
+  "dependencies": {
+    "three": "^0.168.0",
+    "gsap": "^3.12.5",
+    "idb": "^8.0.0"
+  }
+}

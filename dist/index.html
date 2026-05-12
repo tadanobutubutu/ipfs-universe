@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IPFS Universe</title>
+  <meta name="description" content="A real-time 3D visualization of the IPFS network powered by Three.js and public IPFS gateways." />
+  <style>
+    :root {
+      --color-bg: #080b14;
+      --color-surface: #0d1117;
+      --color-border: rgba(255,255,255,0.08);
+      --color-text: #e6e8ed;
+      --color-text-muted: #8b949e;
+      --color-primary: #58a6ff;
+      --color-accent: #3fb950;
+      --color-warn: #f0883e;
+      --color-error: #f85149;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --font-body: 'Inter', system-ui, sans-serif;
+      --radius: 8px;
+      --transition: 160ms cubic-bezier(0.16,1,0.3,1);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); overflow: hidden; }
+    #canvas-container { position: fixed; inset: 0; z-index: 0; }
+    canvas { display: block; width: 100% !important; height: 100% !important; }
+    #hud {
+      position: fixed; inset: 0; z-index: 10; pointer-events: none;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      grid-template-columns: 280px 1fr 280px;
+      gap: 12px; padding: 16px;
+    }
+    #header {
+      grid-column: 1 / -1; pointer-events: all;
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(13,17,23,0.75); backdrop-filter: blur(12px);
+      border: 1px solid var(--color-border); border-radius: var(--radius); padding: 10px 16px;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--color-primary); }
+    .logo svg { flex-shrink: 0; }
+    #renderer-badge {
+      font-family: var(--font-mono); font-size: 11px; padding: 3px 8px;
+      border-radius: 4px; background: rgba(88,166,255,0.12);
+      border: 1px solid rgba(88,166,255,0.3); color: var(--color-primary); letter-spacing: 0.05em;
+    }
+    #renderer-badge.legacy { background: rgba(240,136,62,0.12); border-color: rgba(240,136,62,0.3); color: var(--color-warn); }
+    .header-actions { display: flex; gap: 8px; }
+    .panel {
+      pointer-events: all;
+      background: rgba(13,17,23,0.75); backdrop-filter: blur(12px);
+      border: 1px solid var(--color-border); border-radius: var(--radius);
+      padding: 14px; font-family: var(--font-mono); font-size: 12px;
+    }
+    .panel-title { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-muted); margin-bottom: 12px; }
+    #panel-left  { grid-column: 1; grid-row: 2; align-self: start; }
+    #panel-right { grid-column: 3; grid-row: 2; align-self: start; }
+    .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-val { font-weight: 600; color: var(--color-text); }
+    .stat-val.live { color: var(--color-accent); }
+    .stat-val.warn { color: var(--color-warn); }
+    #log {
+      grid-column: 1 / -1; grid-row: 3; pointer-events: all;
+      background: rgba(13,17,23,0.8); backdrop-filter: blur(12px);
+      border: 1px solid var(--color-border); border-radius: var(--radius);
+      padding: 10px 14px; font-family: var(--font-mono); font-size: 11px;
+      display: flex; gap: 16px; align-items: center; overflow: hidden;
+    }
+    #log-label { color: var(--color-text-muted); flex-shrink: 0; letter-spacing: 0.08em; }
+    #log-entries { display: flex; gap: 20px; overflow: hidden; flex: 1; }
+    .log-entry { white-space: nowrap; opacity: 0; animation: fadeSlide 0.4s forwards; }
+    .log-entry.info  { color: var(--color-primary); }
+    .log-entry.ok    { color: var(--color-accent); }
+    .log-entry.warn  { color: var(--color-warn); }
+    .log-entry.error { color: var(--color-error); }
+    @keyframes fadeSlide { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+    .btn {
+      font-family: var(--font-mono); font-size: 12px; padding: 7px 14px;
+      border-radius: 6px; border: 1px solid var(--color-border);
+      background: rgba(255,255,255,0.05); color: var(--color-text);
+      cursor: pointer; transition: background var(--transition), border-color var(--transition);
+      white-space: nowrap;
+    }
+    .btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+    .btn.primary { background: rgba(88,166,255,0.15); border-color: rgba(88,166,255,0.4); color: var(--color-primary); }
+    .btn.primary:hover { background: rgba(88,166,255,0.25); }
+    .btn.success { background: rgba(63,185,80,0.15); border-color: rgba(63,185,80,0.4); color: var(--color-accent); }
+    .btn.running { background: rgba(63,185,80,0.15); border-color: rgba(63,185,80,0.4); color: var(--color-accent); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--color-text-muted); margin-right: 6px; flex-shrink: 0; }
+    .dot.live { background: var(--color-accent); box-shadow: 0 0 6px var(--color-accent); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    #legacy-tooltip {
+      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(240,136,62,0.15); border: 1px solid rgba(240,136,62,0.4);
+      color: var(--color-warn); font-family: var(--font-mono); font-size: 11px;
+      padding: 8px 16px; border-radius: 6px; display: none; z-index: 100; text-align: center;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/assets/index-DNh4MeKI.js"></script>
+</head>
+<body>
+
+<div id="canvas-container">
+  <canvas id="main-canvas"></canvas>
+</div>
+
+<div id="hud">
+  <div id="header">
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="1.5" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <circle cx="4"  cy="6"  r="2"/>
+        <circle cx="20" cy="6"  r="2"/>
+        <circle cx="4"  cy="18" r="2"/>
+        <circle cx="20" cy="18" r="2"/>
+        <line x1="12" y1="9"  x2="5"  y2="7"/>
+        <line x1="12" y1="9"  x2="19" y2="7"/>
+        <line x1="12" y1="15" x2="5"  y2="17"/>
+        <line x1="12" y1="15" x2="19" y2="17"/>
+      </svg>
+      IPFS_UNIVERSE
+    </div>
+    <span id="renderer-badge">DETECTING…</span>
+    <div class="header-actions">
+      <button class="btn primary" id="btn-wallet" onclick="connectWallet()">&#x2B21; Connect Wallet</button>
+      <button class="btn" id="btn-ipfs" onclick="startIPFSProbe()">&#x25CE; Probe Network</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-left">
+    <div class="panel-title">// network_stats</div>
+    <div class="stat-row">
+      <span><span class="dot" id="dot-peers"></span>gateways_live</span>
+      <span class="stat-val" id="stat-peers">0</span>
+    </div>
+    <div class="stat-row">
+      <span>peers_stored</span>
+      <span class="stat-val" id="stat-peers-stored">0</span>
+    </div>
+    <div class="stat-row">
+      <span>wallet</span>
+      <span class="stat-val" id="stat-nodeid" style="font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis">—</span>
+    </div>
+    <div class="stat-row">
+      <span>uptime</span>
+      <span class="stat-val live" id="stat-uptime">00:00:00</span>
+    </div>
+    <div class="stat-row">
+      <span>blocks_fetched</span>
+      <span class="stat-val live" id="stat-blocks">0</span>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-right">
+    <div class="panel-title">// renderer_info</div>
+    <div class="stat-row">
+      <span>renderer</span>
+      <span class="stat-val" id="info-api">—</span>
+    </div>
+    <div class="stat-row">
+      <span>worker_status</span>
+      <span class="stat-val" id="info-worker">idle</span>
+    </div>
+    <div class="stat-row">
+      <span>particles</span>
+      <span class="stat-val live" id="info-particles">—</span>
+    </div>
+    <div class="stat-row">
+      <span>fps</span>
+      <span class="stat-val live" id="info-fps">—</span>
+    </div>
+    <div class="stat-row">
+      <span>engine</span>
+      <span class="stat-val" id="info-engine">Three.js r168</span>
+    </div>
+  </div>
+
+  <div id="log">
+    <span id="log-label">LOG &gt;</span>
+    <div id="log-entries"></div>
+  </div>
+</div>
+
+<div id="legacy-tooltip"></div>
+
+
+</body>
+</html>
+

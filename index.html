@@ -134,8 +134,12 @@
   <div class="panel" id="panel-left">
     <div class="panel-title">// network_stats</div>
     <div class="stat-row">
-      <span><span class="dot" id="dot-peers"></span>gateways</span>
-      <span class="stat-val" id="stat-peers">—</span>
+      <span><span class="dot" id="dot-peers"></span>gateways_live</span>
+      <span class="stat-val" id="stat-peers">0</span>
+    </div>
+    <div class="stat-row">
+      <span>peers_stored</span>
+      <span class="stat-val" id="stat-peers-stored">0</span>
     </div>
     <div class="stat-row">
       <span>wallet</span>
@@ -149,21 +153,17 @@
       <span>blocks_fetched</span>
       <span class="stat-val live" id="stat-blocks">0</span>
     </div>
-    <div class="stat-row">
-      <span>best_gateway_ms</span>
-      <span class="stat-val" id="stat-latency">—</span>
-    </div>
   </div>
 
   <div class="panel" id="panel-right">
     <div class="panel-title">// renderer_info</div>
     <div class="stat-row">
-      <span>engine</span>
-      <span class="stat-val" id="info-engine">—</span>
+      <span>renderer</span>
+      <span class="stat-val" id="info-api">—</span>
     </div>
     <div class="stat-row">
-      <span>api</span>
-      <span class="stat-val" id="info-api">—</span>
+      <span>worker_status</span>
+      <span class="stat-val" id="info-worker">idle</span>
     </div>
     <div class="stat-row">
       <span>particles</span>
@@ -174,8 +174,8 @@
       <span class="stat-val live" id="info-fps">—</span>
     </div>
     <div class="stat-row">
-      <span>probe_status</span>
-      <span class="stat-val" id="info-wallet">idle</span>
+      <span>engine</span>
+      <span class="stat-val" id="info-engine">Three.js r168</span>
     </div>
   </div>
 
@@ -187,298 +187,8 @@
 
 <div id="legacy-tooltip"></div>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
-  }
-}
-</script>
-
-<script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
-// ─── Logger
-const logEl = document.getElementById('log-entries');
-function log(msg, type = 'info') {
-  const el = document.createElement('span');
-  el.className = `log-entry ${type}`;
-  const d = new Date();
-  const ts = d.toTimeString().slice(0, 8);
-  el.textContent = `[${ts}] ${msg}`;
-  logEl.prepend(el);
-  while (logEl.children.length > 6) logEl.removeChild(logEl.lastChild);
-}
-
-// ─── WebGPU detection
-const badge         = document.getElementById('renderer-badge');
-const infoEngine    = document.getElementById('info-engine');
-const infoApi       = document.getElementById('info-api');
-const infoParticles = document.getElementById('info-particles');
-const infoFps       = document.getElementById('info-fps');
-const infoStatus    = document.getElementById('info-wallet');
-
-let useWebGPU = false;
-if (navigator.gpu) {
-  try { const a = await navigator.gpu.requestAdapter(); if (a) useWebGPU = true; } catch {}
-}
-
-badge.textContent      = useWebGPU ? 'WebGPU ❆' : 'WebGL [LEGACY]';
-badge.className        = useWebGPU ? '' : 'legacy';
-infoEngine.textContent = 'Three.js r168';
-infoApi.textContent    = useWebGPU ? 'WebGPU' : 'WebGL';
-log(useWebGPU ? 'WebGPU adapter acquired' : 'WebGPU unavailable — falling back to WebGL', useWebGPU ? 'ok' : 'warn');
-
-if (!useWebGPU) {
-  const tip = document.getElementById('legacy-tooltip');
-  tip.textContent = '⚠ LEGACY MODE: Running on WebGL. No judgment.';
-  tip.style.display = 'block';
-  setTimeout(() => { tip.style.display = 'none'; }, 6000);
-}
-
-// ─── Scene
-const canvas = document.getElementById('main-canvas');
-let renderer;
-try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-} catch (e) {
-  log(`WebGL init failed: ${e.message}`, 'error');
-  document.getElementById('canvas-container').innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#f85149;font-family:monospace;font-size:14px;">WebGL unavailable — try a different browser</div>';
-  throw e;
-}
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x080b14);
-
-const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
-camera.position.set(0, 0, 120);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping   = true;
-controls.dampingFactor   = 0.05;
-controls.minDistance     = 40;
-controls.maxDistance     = 400;
-controls.autoRotate      = true;
-controls.autoRotateSpeed = 0.3;
-
-// ─── Starfield
-const STAR_COUNT = 8000;
-const starGeo = new THREE.BufferGeometry();
-const starPos = new Float32Array(STAR_COUNT * 3);
-for (let i = 0; i < STAR_COUNT * 3; i++) starPos[i] = (Math.random() - 0.5) * 1800;
-starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({
-  color: 0xffffff, size: 0.5, sizeAttenuation: true, transparent: true, opacity: 0.6
-})));
-
-// ─── IPFS node particles
-const NODE_COUNT = useWebGPU ? 500 : 180;
-infoParticles.textContent = NODE_COUNT.toLocaleString();
-
-const nodeGeo    = new THREE.BufferGeometry();
-const nodePos2   = new Float32Array(NODE_COUNT * 3);
-const nodeCol    = new Float32Array(NODE_COUNT * 3);
-const nodeSpeeds = [];
-
-for (let i = 0; i < NODE_COUNT; i++) {
-  const theta = Math.random() * Math.PI * 2;
-  const phi   = Math.acos(2 * Math.random() - 1);
-  const r     = 30 + Math.random() * 60;
-  nodePos2[i*3]   = r * Math.sin(phi) * Math.cos(theta);
-  nodePos2[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
-  nodePos2[i*3+2] = r * Math.cos(phi);
-  const t = Math.random();
-  nodeCol[i*3]   = t * 0.2;
-  nodeCol[i*3+1] = 0.5 + t * 0.5;
-  nodeCol[i*3+2] = 0.8 + t * 0.2;
-  nodeSpeeds.push((Math.random() - 0.5) * 0.003);
-}
-nodeGeo.setAttribute('position', new THREE.BufferAttribute(nodePos2, 3));
-nodeGeo.setAttribute('color',    new THREE.BufferAttribute(nodeCol, 3));
-const nodePoints = new THREE.Points(nodeGeo, new THREE.PointsMaterial({
-  size: useWebGPU ? 2.5 : 3, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: 0.85
-}));
-scene.add(nodePoints);
-
-// ─── Connection lines
-const LINE_COUNT    = useWebGPU ? 120 : 40;
-const linePositions = new Float32Array(LINE_COUNT * 6);
-const lineGeo       = new THREE.BufferGeometry();
-lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
-const lines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({
-  color: 0x1e90ff, transparent: true, opacity: 0.12
-}));
-scene.add(lines);
-
-function rebuildLines() {
-  const pos = nodeGeo.attributes.position.array;
-  for (let i = 0; i < LINE_COUNT; i++) {
-    const a = Math.floor(Math.random() * NODE_COUNT);
-    const b = Math.floor(Math.random() * NODE_COUNT);
-    linePositions[i*6]   = pos[a*3];   linePositions[i*6+1] = pos[a*3+1]; linePositions[i*6+2] = pos[a*3+2];
-    linePositions[i*6+3] = pos[b*3];   linePositions[i*6+4] = pos[b*3+1]; linePositions[i*6+5] = pos[b*3+2];
-  }
-  lineGeo.attributes.position.needsUpdate = true;
-}
-rebuildLines();
-
-// ─── Central node
-const coreMat = new THREE.MeshBasicMaterial({ color: 0x58a6ff, wireframe: true });
-const core    = new THREE.Mesh(new THREE.OctahedronGeometry(3, 0), coreMat);
-scene.add(core);
-scene.add(new THREE.Mesh(
-  new THREE.SphereGeometry(4.5, 16, 16),
-  new THREE.MeshBasicMaterial({ color: 0x1a4a8a, transparent: true, opacity: 0.15 })
-));
-
-// ─── Stats
-let blocksFetched = 0;
-let frameCount = 0, lastFpsTime = performance.now();
-const statBlocks  = document.getElementById('stat-blocks');
-const statUptime  = document.getElementById('stat-uptime');
-const statPeers   = document.getElementById('stat-peers');
-const statLatency = document.getElementById('stat-latency');
-const dotPeers    = document.getElementById('dot-peers');
-let startTime = performance.now();
-let lineRebuildTimer = 0;
-
-// ─── Animation loop
-function animate() {
-  requestAnimationFrame(animate);
-  const pos = nodeGeo.attributes.position.array;
-  for (let i = 0; i < NODE_COUNT; i++) {
-    pos[i*3+1] += nodeSpeeds[i];
-    if (Math.abs(pos[i*3+1]) > 90) nodeSpeeds[i] *= -1;
-  }
-  nodeGeo.attributes.position.needsUpdate = true;
-  lineRebuildTimer++;
-  if (lineRebuildTimer > 120) { rebuildLines(); lineRebuildTimer = 0; }
-  const t = performance.now() * 0.001;
-  core.rotation.y = t * 0.4;
-  core.rotation.x = t * 0.25;
-  controls.update();
-  renderer.render(scene, camera);
-  frameCount++;
-  const now = performance.now();
-  if (now - lastFpsTime > 1000) {
-    infoFps.textContent = Math.round(frameCount * 1000 / (now - lastFpsTime));
-    frameCount = 0; lastFpsTime = now;
-    const e = Math.floor((now - startTime) / 1000);
-    statUptime.textContent =
-      `${String(Math.floor(e/3600)).padStart(2,'0')}:${String(Math.floor((e%3600)/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;
-  }
-}
-animate();
-
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-// ─── IPFS Gateway probe (pure fetch, zero external CDN dependencies)
-// Uses Trustless Gateway protocol (application/vnd.ipld.raw) — no library needed.
-const PROBE_CID = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
-const GATEWAYS  = [
-  { name: 'ipfs.io',              url: 'https://ipfs.io' },
-  { name: 'dweb.link',            url: 'https://dweb.link' },
-  { name: 'trustless-gateway',    url: 'https://trustless-gateway.link' },
-  { name: 'w3s.link',             url: 'https://w3s.link' },
-];
-
-let liveGateways = 0;
-let bestMs = Infinity;
-
-async function probeOne(gw) {
-  const url = `${gw.url}/ipfs/${PROBE_CID}?format=raw`;
-  const t0 = performance.now();
-  try {
-    const res = await fetch(url, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(8000),
-    });
-    const ms = Math.round(performance.now() - t0);
-    if (res.ok || res.status === 200 || res.status === 206 || res.status === 412) {
-      liveGateways++;
-      blocksFetched++;
-      statBlocks.textContent = blocksFetched.toLocaleString();
-      if (ms < bestMs) {
-        bestMs = ms;
-        statLatency.textContent = `${ms} ms`;
-        statLatency.className   = 'stat-val live';
-      }
-      statPeers.textContent = String(liveGateways);
-      dotPeers.className    = 'dot live';
-      log(`${gw.name}: ${ms}ms ✓`, 'ok');
-    } else {
-      log(`${gw.name}: HTTP ${res.status}`, 'warn');
-    }
-  } catch (e) {
-    log(`${gw.name}: ${e.message ?? 'timeout'}`, 'warn');
-  }
-}
-
-async function probeAll() {
-  liveGateways = 0;
-  bestMs = Infinity;
-  infoStatus.textContent = 'probing…';
-  infoStatus.className   = 'stat-val warn';
-  log('Probing all IPFS gateways…', 'info');
-  await Promise.allSettled(GATEWAYS.map(probeOne));
-  infoStatus.textContent = liveGateways > 0 ? `${liveGateways}/${GATEWAYS.length} live` : 'all timeout';
-  infoStatus.className   = liveGateways > 0 ? 'stat-val live' : 'stat-val warn';
-}
-
-// Auto-probe on load, then every 30s
-probeAll();
-setInterval(probeAll, 30000);
-
-// Manual probe button
-window.startIPFSProbe = function() {
-  const btn = document.getElementById('btn-ipfs');
-  btn.disabled = true;
-  btn.textContent = '◎ Probing…';
-  probeAll().finally(() => {
-    btn.disabled = false;
-    btn.textContent = '◎ Probe Network';
-  });
-};
-
-// ─── MetaMask
-window.connectWallet = async function() {
-  const btn        = document.getElementById('btn-wallet');
-  const statNodeId = document.getElementById('stat-nodeid');
-  if (!window.ethereum) {
-    log('MetaMask not detected — install MetaMask extension', 'error');
-    return;
-  }
-  try {
-    btn.disabled = true;
-    btn.textContent = '⬡ Connecting…';
-    log('Requesting accounts via window.ethereum…', 'info');
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    const addr = accounts[0];
-    const short = addr.slice(0, 6) + '…' + addr.slice(-4);
-    statNodeId.textContent = short;
-    const hue = parseInt(addr.slice(2, 8), 16) % 360;
-    coreMat.color.setHSL(hue / 360, 0.8, 0.6);
-    btn.textContent = '⬡ ' + short;
-    btn.className   = 'btn success';
-    log(`Wallet connected: ${short}`, 'ok');
-  } catch (e) {
-    btn.disabled = false;
-    btn.textContent = '⬡ Connect Wallet';
-    log(`Wallet rejected: ${e.message}`, 'error');
-  }
-};
-
-log('IPFS Universe v1.0 — zero external CDN deps', 'info');
-log(`Renderer: ${useWebGPU ? 'WebGPU' : 'WebGL'} | Particles: ${NODE_COUNT}`, useWebGPU ? 'ok' : 'warn');
-</script>
+<script type="module" src="./src/main.ts"></script>
 
 </body>
 </html>
+
