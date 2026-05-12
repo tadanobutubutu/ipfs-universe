@@ -321,6 +321,24 @@ function animate() {
 (window as any).startIPFSProbe = function() {
   log('INITIATING_NETWORK_PROBE: PROTOCOL_QUIC_WANT', 'info');
   Atomics.add(peerCounter, 0, 1);
+  
+  // Visual Feedback: Bloom Pulse
+  if (composer) {
+    const bloom = composer.passes.find(p => p instanceof UnrealBloomPass) as UnrealBloomPass;
+    if (bloom) {
+      gsap.to(bloom, {
+        strength: 4.0,
+        duration: 0.1,
+        yoyo: true,
+        repeat: 1,
+        ease: "power2.inOut",
+        onComplete: () => { bloom.strength = 1.5; }
+      });
+    }
+  }
+  
+  // Flash Core
+  gsap.to(coreMat, { opacity: 1, duration: 0.1, yoyo: true, repeat: 3 });
 };
 
 window.addEventListener('resize', () => {
