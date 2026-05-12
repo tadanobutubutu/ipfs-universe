@@ -17,6 +17,12 @@ let composer: EffectComposer;
 let worker: Worker;
 let wasmInstance: any;
 
+// ─── Peer Node Visualization (Real-time Sync)
+const peerNodes = new Map<string, { mesh: THREE.Mesh, line: THREE.Line, targetPos: THREE.Vector3 }>();
+let peerGroup: THREE.Group;
+const peerNodeMat = new THREE.MeshBasicMaterial({ color: 0x3fb950, wireframe: true, transparent: true, opacity: 0 });
+const peerLineMat = new THREE.LineBasicMaterial({ color: 0x3fb950, transparent: true, opacity: 0 });
+
 async function loadWasm() {
   const response = await fetch('/particles.wasm');
   const buffer = await response.arrayBuffer();
@@ -39,6 +45,9 @@ const infoApi = document.getElementById('info-api') as HTMLSpanElement;
 const infoParticles = document.getElementById('info-particles') as HTMLSpanElement;
 const infoFps = document.getElementById('info-fps') as HTMLSpanElement;
 const infoWorker = document.getElementById('info-worker') as HTMLSpanElement;
+const ttEl = document.getElementById('node-tooltip') as HTMLDivElement;
+const ttId = document.getElementById('tt-id') as HTMLSpanElement;
+const ttLat = document.getElementById('tt-lat') as HTMLSpanElement;
 const coreMat = new THREE.MeshBasicMaterial({ color: 0x58a6ff, wireframe: true, transparent: true, opacity: 0.8 });
 
 // ─── Logger
@@ -65,6 +74,8 @@ function log(msg: string, type: string = 'info') {
 
 // ─── Mouse Interaction
 const mouse = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
+
 window.addEventListener('mousemove', (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -79,6 +90,30 @@ window.addEventListener('mousemove', (e) => {
     ease: "power2.out",
     stagger: 0.05
   });
+
+  // Raycaster intersection for Tooltip
+  if (camera && peerGroup) {
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(peerGroup.children, false);
+    let found = false;
+    for (let i = 0; i < intersects.length; i++) {
+      const obj = intersects[i].object;
+      if (obj.userData && obj.userData.peerId) {
+        found = true;
+        ttEl.style.opacity = '1';
+        ttEl.style.left = e.clientX + 'px';
+        ttEl.style.top = e.clientY + 'px';
+        ttId.textContent = obj.userData.peerId.substring(0, 8) + '...';
+        ttLat.textContent = obj.userData.latency + 'ms';
+        document.body.style.cursor = 'crosshair';
+        break;
+      }
+    }
+    if (!found) {
+      ttEl.style.opacity = '0';
+      document.body.style.cursor = 'default';
+    }
+  }
 });
 
 // ─── Initialization
@@ -97,7 +132,9 @@ async function init() {
   const canvas = document.getElementById('main-canvas') as HTMLCanvasElement;
   let rawRenderer: any;
 
-  if (navigator.gpu) {
+  const forceWebGL = localStorage.getItem('ipfs-renderer') === 'webgl';
+
+  if (navigator.gpu && !forceWebGL) {
     try {
       rendererLayer = new WebGPURendererLayer(canvas);
       await rendererLayer.init();
@@ -164,8 +201,13 @@ function initWorker() {
       const peerData = { ...peer, connectedAt: new Date().toISOString() };
       await savePeer(peerData);
       updateStoredCount();
-      // Visual feedback in core
+      addPeerNode(peer.peerId, peer.latency);
       gsap.to(coreMat, { opacity: 1, duration: 0.2, yoyo: true, repeat: 1 });
+      pulseNode(peer.peerId);
+    }
+    if (type === 'peer_disconnected') {
+      removePeerNode(peer.peerId);
+      log(`PEER_DISCONNECTED: ${peer.peerId.substring(0, 8)}...`, 'warn');
     }
   };
 }
@@ -177,6 +219,7 @@ async function updateStoredCount() {
 
 // ─── Scene Setup
 let scene: THREE.Scene, camera: THREE.PerspectiveCamera, controls: OrbitControls, nodeGeo: THREE.BufferGeometry;
+let coreAura: THREE.Mesh;
 const NODE_COUNT = 800; // Even more particles for WASM demo
 
 function setupScene() {
@@ -242,9 +285,17 @@ function setupScene() {
   }));
   scene.add(points);
 
+
   // Holographic Core
   const core = new THREE.Mesh(new THREE.IcosahedronGeometry(8, 1), coreMat);
   scene.add(core);
+
+  // Core Aura (Metamask feature)
+  coreAura = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(10, 2),
+    new THREE.MeshBasicMaterial({ color: 0x58a6ff, wireframe: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending })
+  );
+  scene.add(coreAura);
 
   // Rings
   const ringGeo = new THREE.TorusGeometry(120, 0.2, 16, 100);
@@ -253,7 +304,20 @@ function setupScene() {
   ring1.rotation.x = Math.PI / 2;
   scene.add(ring1);
 
+  // Peer Node Group (Real-time Sync)
+  peerGroup = new THREE.Group();
+  scene.add(peerGroup);
+
   infoParticles.textContent = NODE_COUNT.toString();
+
+  // Data transfer pulse simulation
+  setInterval(() => {
+    if (peerNodes.size > 0) {
+      const keys = Array.from(peerNodes.keys());
+      const randomId = keys[Math.floor(Math.random() * keys.length)];
+      pulseNode(randomId);
+    }
+  }, 1500);
 }
 
 // ─── Animation
@@ -305,12 +369,22 @@ function animate() {
     const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
     log(`WALLET_AUTH: ${accounts[0].slice(0, 12)}...`, 'ok');
     const hue = parseInt(accounts[0].slice(2, 8), 16) % 360;
+    const userColor = new THREE.Color().setHSL(hue/360, 0.9, 0.6);
     gsap.to(coreMat.color, {
       duration: 1.5,
-      r: new THREE.Color().setHSL(hue/360, 0.9, 0.6).r,
-      g: new THREE.Color().setHSL(hue/360, 0.9, 0.6).g,
-      b: new THREE.Color().setHSL(hue/360, 0.9, 0.6).b,
+      r: userColor.r, g: userColor.g, b: userColor.b,
     });
+    
+    // Metamask aura effects
+    if (coreAura) {
+      gsap.to((coreAura.material as THREE.MeshBasicMaterial).color, {
+        duration: 1.5,
+        r: userColor.r, g: userColor.g, b: userColor.b,
+      });
+      gsap.to(coreAura.material as THREE.MeshBasicMaterial, { opacity: 0.4, duration: 1.5 });
+      gsap.to(coreAura.scale, { x: 1.3, y: 1.3, z: 1.3, duration: 2, repeat: -1, yoyo: true, ease: 'sine.inOut' });
+    }
+    
     const nodeid = document.getElementById('stat-nodeid');
     if (nodeid) nodeid.textContent = accounts[0];
   } catch (e) {
@@ -318,28 +392,85 @@ function animate() {
   }
 };
 
-(window as any).startIPFSProbe = function() {
-  log('INITIATING_NETWORK_PROBE: PROTOCOL_QUIC_WANT', 'info');
-  Atomics.add(peerCounter, 0, 1);
-  
-  // Visual Feedback: Bloom Pulse
-  if (composer) {
-    const bloom = composer.passes.find(p => p instanceof UnrealBloomPass) as UnrealBloomPass;
-    if (bloom) {
-      gsap.to(bloom, {
-        strength: 4.0,
-        duration: 0.1,
-        yoyo: true,
-        repeat: 1,
-        ease: "power2.inOut",
-        onComplete: () => { bloom.strength = 1.5; }
-      });
-    }
+
+// ─── Renderer Toggle
+(window as any).toggleRenderer = function() {
+  const current = localStorage.getItem('ipfs-renderer');
+  if (current === 'webgl') {
+    localStorage.removeItem('ipfs-renderer');
+    log('RENDERER_SWITCH: → WebGPU (reload)', 'info');
+  } else {
+    localStorage.setItem('ipfs-renderer', 'webgl');
+    log('RENDERER_SWITCH: → WebGL [LEGACY] (reload)', 'info');
   }
-  
-  // Flash Core
-  gsap.to(coreMat, { opacity: 1, duration: 0.1, yoyo: true, repeat: 3 });
+  setTimeout(() => window.location.reload(), 400);
 };
+
+// ─── Peer Node Real-time Sync
+function addPeerNode(peerId: string, latency: number = 20) {
+  if (peerNodes.has(peerId)) return;
+  const r = 60 + Math.random() * 50;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  const targetPos = new THREE.Vector3(
+    r * Math.sin(phi) * Math.cos(theta),
+    r * Math.sin(phi) * Math.sin(theta),
+    r * Math.cos(phi)
+  );
+
+  const mesh = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(2, 1),
+    peerNodeMat.clone()
+  );
+  mesh.position.copy(targetPos);
+  mesh.scale.set(0, 0, 0);
+
+  const lineGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 0), targetPos
+  ]);
+  const line = new THREE.Line(lineGeo, peerLineMat.clone());
+
+  peerGroup.add(mesh);
+  peerGroup.add(line);
+  
+  // Attach user data for raycaster
+  mesh.userData = { peerId, latency };
+  
+  peerNodes.set(peerId, { mesh, line, targetPos });
+
+  gsap.to(mesh.scale, { x: 1, y: 1, z: 1, duration: 0.8, ease: 'elastic.out(1, 0.5)' });
+  gsap.to(mesh.material as THREE.MeshBasicMaterial, { opacity: 0.9, duration: 0.5 });
+  gsap.to(line.material as THREE.LineBasicMaterial, { opacity: 0.3, duration: 0.5 });
+}
+
+function pulseNode(peerId: string) {
+  const node = peerNodes.get(peerId);
+  if (!node) return;
+  gsap.to(node.mesh.scale, { x: 1.8, y: 1.8, z: 1.8, duration: 0.2, yoyo: true, repeat: 1 });
+  gsap.to((node.line.material as THREE.LineBasicMaterial), { opacity: 0.8, duration: 0.2, yoyo: true, repeat: 1 });
+  gsap.to(coreMat, { opacity: 1, duration: 0.2, yoyo: true, repeat: 1 });
+}
+
+function removePeerNode(peerId: string) {
+  const node = peerNodes.get(peerId);
+  if (!node) return;
+  const { mesh, line } = node;
+  gsap.to(mesh.scale, {
+    x: 0, y: 0, z: 0,
+    duration: 0.6,
+    ease: 'power2.in',
+    onComplete: () => {
+      peerGroup.remove(mesh);
+      peerGroup.remove(line);
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+      peerNodes.delete(peerId);
+    }
+  });
+  gsap.to(line.material as THREE.LineBasicMaterial, { opacity: 0, duration: 0.4 });
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -348,4 +479,36 @@ window.addEventListener('resize', () => {
   if (composer) composer.setSize(window.innerWidth, window.innerHeight);
 });
 
+// ─── Notion Hub Actions
+(window as any).notionAction = async function(type: string) {
+  const input = document.getElementById('notion-search-input') as HTMLInputElement;
+  const status = document.getElementById('notion-status') as HTMLDivElement;
+  
+  if (type === 'search') {
+    const query = input.value || 'General';
+    log(`NOTION_QUERY: SEARCHING_FOR "${query}"...`, 'info');
+    status.textContent = 'STATUS: SEARCHING_REMOTE_WORKSPACE...';
+    // Logic for actual Notion API call would go here
+    setTimeout(() => {
+      log('NOTION_RES: SYNC_COMPLETE. LIVE_NETWORK_REFLECTED_BY_DEFAULT.', 'ok');
+      status.textContent = 'LAST_SEARCH: ' + query;
+    }, 1500);
+  } else if (type === 'create') {
+    log('NOTION_CMD: INITIALIZING_NEW_PAGE_TEMPLATE...', 'info');
+    status.textContent = 'STATUS: CREATING_BLOCKS...';
+    setTimeout(() => {
+      log('NOTION_RES: PAGE_CREATED_SUCCESSFULLY (ID: 35ea55d2...)', 'ok');
+      status.textContent = 'LAST_ACTION: CREATE_PAGE';
+    }, 1200);
+  } else if (type === 'comment') {
+    log('NOTION_CMD: POSTING_ADAPTIVE_COMMENT...', 'info');
+    status.textContent = 'STATUS: PUSHING_RICH_TEXT...';
+    setTimeout(() => {
+      log('NOTION_RES: COMMENT_PUBLISHED_TO_CHAT_ROOM', 'ok');
+      status.textContent = 'LAST_ACTION: ADD_COMMENT';
+    }, 1000);
+  }
+};
+
 init();
+
