@@ -18,9 +18,38 @@ self.onmessage = async (e: MessageEvent) => {
 
   if (type === 'init') {
     peerCounter = new Int32Array(data.sharedBuffer);
-    await initHelia();
+    if (data.isLocal) {
+      await initHelia();
+    } else {
+      startSimulation();
+    }
   }
 };
+
+function startSimulation() {
+  self.postMessage({ type: 'log', msg: 'WEB_DEPLOY_DETECTED: STARTING_SIMULATION_LAYER...', level: 'info' });
+  self.postMessage({ type: 'worker_status', status: 'simulating' });
+  
+  // Emit fake peers
+  const emitFakePeer = () => {
+    const peerId = 'Qm' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    if (peerCounter) peerCounter[0]++;
+    
+    self.postMessage({ 
+      type: 'peer_discovered', 
+      peer: {
+        peerId,
+        latency: Math.floor(Math.random() * 200) + 50,
+        gatewayUsed: 'simulated-edge'
+      } 
+    });
+  };
+
+  for (let i = 0; i < 5; i++) setTimeout(emitFakePeer, i * 500);
+  setInterval(emitFakePeer, 4000);
+  
+  startGatewayProbing();
+}
 
 async function initHelia() {
   try {
@@ -123,13 +152,15 @@ function startGatewayProbing() {
   const gateways = [
     'https://ipfs.io/ipfs/QmUNLLsP2unsqwsjyhpS9nXYXbTq6Hjsh4xU44UToYf8Xq',
     'https://cloudflare-ipfs.com/ipfs/QmUNLLsP2unsqwsjyhpS9nXYXbTq6Hjsh4xU44UToYf8Xq',
-    'https://dweb.link/ipfs/QmUNLLsP2unsqwsjyhpS9nXYXbTq6Hjsh4xU44UToYf8Xq'
+    'https://dweb.link/ipfs/QmUNLLsP2unsqwsjyhpS9nXYXbTq6Hjsh4xU44UToYf8Xq',
+    'https://gateway.pinata.cloud/ipfs/QmUNLLsP2unsqwsjyhpS9nXYXbTq6Hjsh4xU44UToYf8Xq'
   ];
 
-  setInterval(() => {
+  const probe = () => {
     const gw = gateways[Math.floor(Math.random() * gateways.length)];
     const xhr = new XMLHttpRequest();
     xhr.open('GET', gw, true);
+    xhr.timeout = 5000;
     xhr.onload = () => {
       if (xhr.status === 200) {
         self.postMessage({ type: 'log', msg: `Gateway responded: ${new URL(gw).hostname}`, level: 'info' });
@@ -139,5 +170,11 @@ function startGatewayProbing() {
       self.postMessage({ type: 'log', msg: `Gateway timeout: ${new URL(gw).hostname}`, level: 'error' });
     };
     xhr.send();
-  }, 15000);
+  };
+
+  // Initial probes
+  probe();
+  setTimeout(probe, 2000);
+  
+  setInterval(probe, 8000);
 }

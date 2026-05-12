@@ -113,19 +113,52 @@ window.addEventListener('click', (e) => {
 
 function showTooltip(x: number, y: number, data: any, persistent = false) {
   const ttPath = document.getElementById('tt-path') as HTMLSpanElement;
-  ttEl.style.opacity = '1';
+  const ttStatus = document.getElementById('tt-status') as HTMLSpanElement;
+  const ttLoc = document.getElementById('tt-loc') as HTMLSpanElement;
+  const ttProgress = document.getElementById('tt-progress') as HTMLDivElement;
+  
+  gsap.to(ttEl, { 
+    opacity: 1, 
+    duration: 0.3, 
+    scale: persistent ? 1.05 : 1,
+    ease: "back.out(1.7)",
+    onStart: () => {
+      // Glitch effect on appearance
+      const overlay = ttEl.querySelector('.glitch-overlay') as HTMLElement;
+      if (overlay) {
+        gsap.fromTo(overlay, { opacity: 0.8 }, { opacity: 0.1, duration: 0.5, repeat: 1, yoyo: true });
+      }
+    }
+  });
+  
   ttEl.style.left = x + 'px';
   ttEl.style.top = y + 'px';
+  
   ttId.textContent = data.peerId; 
   ttLat.textContent = data.latency + 'ms';
   if (ttPath) ttPath.textContent = data.gatewayUsed || 'libp2p-direct';
+  if (ttLoc) {
+    const locs = ['GENEVA_RELAY', 'TOKYO_CLUSTER', 'US_EAST_GATEWAY', 'BERLIN_NODE', 'SINGAPORE_HOP'];
+    ttLoc.textContent = data.location || locs[Math.floor(Math.random() * locs.length)];
+  }
+  
+  if (ttStatus) {
+    ttStatus.textContent = persistent ? 'LOCKED_ON' : 'ACTIVE_STREAM';
+    ttStatus.style.color = persistent ? 'var(--color-accent)' : 'var(--color-primary)';
+  }
+
+  if (ttProgress) {
+    gsap.fromTo(ttProgress, { width: '0%' }, { width: '100%', duration: 1.5, ease: "power1.inOut", repeat: -1 });
+  }
   
   if (persistent) {
     ttEl.style.borderColor = 'var(--color-accent)';
-    ttEl.style.boxShadow = '0 0 20px var(--color-accent)';
+    ttEl.style.boxShadow = '0 0 40px rgba(63, 185, 80, 0.4), inset 0 0 20px rgba(63, 185, 80, 0.1)';
+    ttEl.style.background = 'rgba(4, 11, 8, 0.95)';
   } else {
     ttEl.style.borderColor = 'var(--color-primary)';
-    ttEl.style.boxShadow = '0 4px 16px rgba(88,166,255,0.2)';
+    ttEl.style.boxShadow = '0 0 30px rgba(88, 166, 255, 0.3), inset 0 0 15px rgba(88, 166, 255, 0.05)';
+    ttEl.style.background = 'rgba(4, 6, 11, 0.9)';
   }
 }
 
@@ -183,41 +216,27 @@ async function init() {
 
   const forceWebGL = localStorage.getItem('ipfs-renderer') === 'webgl';
 
-  if (navigator.gpu && !forceWebGL) {
+  if ((navigator as any).gpu && !forceWebGL) {
     try {
       rendererLayer = new WebGPURendererLayer(canvas);
       await rendererLayer.init();
       rawRenderer = rendererLayer.renderer;
       badge.textContent = 'WebGPU ❆';
     } catch (e) {
-      rendererLayer = new WebGL1Renderer(canvas);
+      fallbackToWebGL(canvas);
       rawRenderer = rendererLayer.renderer;
-      badge.textContent = 'WebGL [LEGACY]';
-      badge.classList.add('legacy');
     }
   } else {
-    rendererLayer = new WebGL1Renderer(canvas);
+    fallbackToWebGL(canvas);
     rawRenderer = rendererLayer.renderer;
-    badge.textContent = 'WebGL [LEGACY]';
-    badge.classList.add('legacy');
   }
 
   infoApi.textContent = rendererLayer.api;
 
   // 2. Scene & Post-processing
   setupScene();
-  
-  // Bloom for WebGL (WebGPU post-processing is still experimental in r168)
   if (rendererLayer.api === 'WebGL') {
-    composer = new EffectComposer(rawRenderer);
-    composer.addPass(new RenderPass(scene, camera));
-    
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.5, 0.4, 0.85
-    );
-    composer.addPass(bloomPass);
-    composer.addPass(new OutputPass());
+    setupPostProcessing(rawRenderer);
   }
 
   // 3. Worker
@@ -236,8 +255,8 @@ async function init() {
 }
 
 function initWorker() {
-  worker = new Worker(new URL('./helia.worker.ts', import.meta.url), { type: 'module' });
-  worker.postMessage({ type: 'init', data: { sharedBuffer } });
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  worker.postMessage({ type: 'init', data: { sharedBuffer, isLocal } });
 
   worker.onmessage = async (e) => {
     const { type, msg, level, status, peer } = e.data;
@@ -278,6 +297,29 @@ const NODE_COUNT = 800; // Even more particles for WASM demo
 
 function setupScene() {
   scene = new THREE.Scene();
+  setupCamera();
+  setupStars();
+  setupNodes();
+  setupCore();
+  setupRings();
+
+  peerGroup = new THREE.Group();
+  scene.add(peerGroup);
+
+  infoParticles.textContent = NODE_COUNT.toString();
+
+  // Data transfer pulse simulation
+  setInterval(() => {
+    if (peerNodes.size > 0) {
+      const keys = Array.from(peerNodes.keys());
+      const randomId = keys[Math.floor(Math.random() * keys.length)];
+      pulseNode(randomId);
+      createDataPulse(randomId);
+    }
+  }, 1000);
+}
+
+function setupCamera() {
   camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
   camera.position.set(0, 40, 180);
 
@@ -286,8 +328,9 @@ function setupScene() {
   controls.enableDamping = true;
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.3;
+}
 
-  // Starfield with depth
+function setupStars() {
   const STAR_COUNT = 10000;
   const starGeo = new THREE.BufferGeometry();
   const starPos = new Float32Array(STAR_COUNT * 3);
@@ -297,8 +340,9 @@ function setupScene() {
     color: 0xffffff, size: 0.8, transparent: true, opacity: 0.3 
   }));
   scene.add(stars);
+}
 
-  // Node Particles
+function setupNodes() {
   nodeGeo = new THREE.BufferGeometry();
   const nodePos = new Float32Array(NODE_COUNT * 3);
   const nodeCol = new Float32Array(NODE_COUNT * 3);
@@ -318,7 +362,6 @@ function setupScene() {
     nodePos[i*3+1] = y;
     nodePos[i*3+2] = z;
     
-    // Gradient from Primary to White
     const mix = Math.random();
     nodeCol[i*3] = mix * 0.4 + 0.3; 
     nodeCol[i*3+1] = mix * 0.4 + 0.6; 
@@ -330,63 +373,55 @@ function setupScene() {
   nodeGeo.setAttribute('color', new THREE.BufferAttribute(nodeCol, 3));
   
   const points = new THREE.Points(nodeGeo, new THREE.PointsMaterial({ 
-    size: 4, 
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.8,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
+    size: 4, vertexColors: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false
   }));
   scene.add(points);
+}
 
-
-  // Holographic Core
+function setupCore() {
   coreMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(8, 1), coreMat);
   scene.add(coreMesh);
   
-  // Add a secondary glow layer to the core
   const coreGlowGeo = new THREE.IcosahedronGeometry(8.5, 1);
   const coreGlowMat = new THREE.MeshBasicMaterial({ 
-    color: 0x58a6ff, 
-    wireframe: true, 
-    transparent: true, 
-    opacity: 0.2,
-    blending: THREE.AdditiveBlending 
+    color: 0x58a6ff, wireframe: true, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending 
   });
   const coreGlow = new THREE.Mesh(coreGlowGeo, coreGlowMat);
   coreMesh.add(coreGlow);
   
   gsap.to(coreGlow.scale, { x: 1.1, y: 1.1, z: 1.1, duration: 2, repeat: -1, yoyo: true, ease: "sine.inOut" });
 
-  // Core Aura (Metamask feature)
   coreAura = new THREE.Mesh(
     new THREE.IcosahedronGeometry(10, 2),
     new THREE.MeshBasicMaterial({ color: 0x58a6ff, wireframe: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending })
   );
   scene.add(coreAura);
+}
 
-  // Rings
+function setupRings() {
   const ringGeo = new THREE.TorusGeometry(120, 0.2, 16, 100);
   const ringMat = new THREE.MeshBasicMaterial({ color: 0x58a6ff, transparent: true, opacity: 0.2 });
   const ring1 = new THREE.Mesh(ringGeo, ringMat);
   ring1.rotation.x = Math.PI / 2;
   scene.add(ring1);
+}
 
-  // Peer Node Group (Real-time Sync)
-  peerGroup = new THREE.Group();
-  scene.add(peerGroup);
+function fallbackToWebGL(canvas: HTMLCanvasElement) {
+  rendererLayer = new WebGL1Renderer(canvas);
+  badge.textContent = 'WebGL [LEGACY]';
+  badge.classList.add('legacy');
+}
 
-  infoParticles.textContent = NODE_COUNT.toString();
-
-  // Data transfer pulse simulation
-  setInterval(() => {
-    if (peerNodes.size > 0) {
-      const keys = Array.from(peerNodes.keys());
-      const randomId = keys[Math.floor(Math.random() * keys.length)];
-      pulseNode(randomId);
-      createDataPulse(randomId);
-    }
-  }, 1000);
+function setupPostProcessing(rawRenderer: any) {
+  composer = new EffectComposer(rawRenderer);
+  composer.addPass(new RenderPass(scene, camera));
+  
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    1.5, 0.4, 0.85
+  );
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
 }
 
 function createDataPulse(peerId: string) {
@@ -394,12 +429,15 @@ function createDataPulse(peerId: string) {
   if (!node) return;
 
   const pulseCount = 3;
+  const userColor = coreAura ? (coreAura.material as THREE.MeshBasicMaterial).color : new THREE.Color(0x58a6ff);
+
   for (let i = 0; i < pulseCount; i++) {
-    const pulseGeo = new THREE.SphereGeometry(0.6, 8, 8);
+    // 1. Particle pulse (Energy flow)
+    const pulseGeo = new THREE.SphereGeometry(0.8, 8, 8);
     const pulseMat = new THREE.MeshBasicMaterial({ 
-      color: 0x58a6ff, 
+      color: userColor, 
       transparent: true, 
-      opacity: 0.8,
+      opacity: 1.0,
       blending: THREE.AdditiveBlending 
     });
     const pulse = new THREE.Mesh(pulseGeo, pulseMat);
@@ -412,25 +450,51 @@ function createDataPulse(peerId: string) {
       x: end.x,
       y: end.y,
       z: end.z,
-      duration: 1.2 + (i * 0.2),
-      delay: i * 0.15,
-      ease: "power2.inOut",
+      duration: 1.0 + (i * 0.3),
+      delay: i * 0.1,
+      ease: "power2.in",
       onUpdate: () => {
         const dist = pulse.position.distanceTo(start);
         const totalDist = end.length();
-        const scale = Math.sin((dist / totalDist) * Math.PI) * 1.5 + 0.3;
+        const progress = dist / totalDist;
+        const scale = Math.sin(progress * Math.PI) * 3.0 + 0.5;
         pulse.scale.set(scale, scale, scale);
-        (pulse.material as THREE.MeshBasicMaterial).opacity = 1 - (dist / totalDist);
+        pulseMat.opacity = Math.sin(progress * Math.PI) * 0.8;
       },
       onComplete: () => {
         scene.remove(pulse);
         pulseGeo.dispose();
         pulseMat.dispose();
-        if (i === pulseCount - 1) {
-          gsap.to(node.mesh.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 0.2, yoyo: true, repeat: 1 });
-        }
       }
     });
+    
+    // 2. Wave pulse (Expanding shockwave at target)
+    if (i === 0) {
+      setTimeout(() => {
+        const shockGeo = new THREE.RingGeometry(0.5, 1.5, 32);
+        const shockMat = new THREE.MeshBasicMaterial({ 
+          color: userColor, 
+          transparent: true, 
+          opacity: 0.9, 
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide
+        });
+        const shock = new THREE.Mesh(shockGeo, shockMat);
+        shock.position.copy(end);
+        shock.lookAt(new THREE.Vector3(0,0,0));
+        scene.add(shock);
+        
+        gsap.to(shock.scale, { x: 12, y: 12, z: 12, duration: 1.2, ease: "expo.out" });
+        gsap.to(shockMat, { opacity: 0, duration: 1.2, ease: "expo.out", onComplete: () => {
+          scene.remove(shock);
+          shockGeo.dispose();
+          shockMat.dispose();
+        }});
+        
+        // Also pulse the node itself
+        pulseNode(peerId);
+      }, 900);
+    }
   }
 }
 
@@ -500,32 +564,77 @@ function animate() {
       // Layered complex aura
       const auraTimeline = gsap.timeline({ repeat: -1 });
       auraTimeline
-        .to(coreAura.scale, { x: 1.6, y: 1.6, z: 1.6, duration: 1.5, ease: 'sine.inOut' })
-        .to(coreAura.scale, { x: 1.2, y: 1.2, z: 1.2, duration: 1.5, ease: 'sine.inOut' });
+        .to(coreAura.scale, { x: 1.8, y: 1.8, z: 1.8, duration: 2.0, ease: 'sine.inOut' })
+        .to(coreAura.scale, { x: 1.3, y: 1.3, z: 1.3, duration: 2.0, ease: 'sine.inOut' });
       
-      gsap.to(coreAura.rotation, { x: Math.PI * 2, y: Math.PI * 2, duration: 15, repeat: -1, ease: 'none' });
+      gsap.to(coreAura.rotation, { x: Math.PI * 2, y: Math.PI * 2, duration: 20, repeat: -1, ease: 'none' });
 
-      // Shield effect (Multiple Rings)
-      for (let i = 0; i < 3; i++) {
-        const shieldGeo = new THREE.TorusGeometry(12 + i * 2, 0.1, 16, 100);
-        const shieldMat = new THREE.MeshBasicMaterial({ color: userColor, transparent: true, opacity: 0.2 - (i * 0.05) });
+      // Core "Energy Flux" Particles
+      const fluxGeo = new THREE.BufferGeometry();
+      const fluxCount = 200;
+      const fluxPos = new Float32Array(fluxCount * 3);
+      for(let i=0; i<fluxCount; i++) {
+        const r = 10 + Math.random() * 5;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        fluxPos[i*3] = r * Math.sin(phi) * Math.cos(theta);
+        fluxPos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+        fluxPos[i*3+2] = r * Math.cos(phi);
+      }
+      fluxGeo.setAttribute('position', new THREE.BufferAttribute(fluxPos, 3));
+      const fluxMat = new THREE.PointsMaterial({ color: userColor, size: 0.5, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending });
+      const fluxPoints = new THREE.Points(fluxGeo, fluxMat);
+      coreMesh.add(fluxPoints);
+      gsap.to(fluxPoints.rotation, { y: Math.PI * 2, duration: 5, repeat: -1, ease: "none" });
+
+      // Shield effect (Multiple Rotating Rings)
+      for (let i = 0; i < 4; i++) {
+        const shieldGeo = new THREE.TorusGeometry(12 + i * 4, 0.08, 16, 100);
+        const shieldMat = new THREE.MeshBasicMaterial({ 
+          color: userColor, 
+          transparent: true, 
+          opacity: 0.3 - (i * 0.05),
+          blending: THREE.AdditiveBlending 
+        });
         const shield = new THREE.Mesh(shieldGeo, shieldMat);
         shield.rotation.x = Math.PI / 2;
         shield.rotation.y = (Math.PI / 4) * i;
         scene.add(shield);
         
-        gsap.to(shield.rotation, { z: Math.PI * 2, duration: 5 + i * 2, repeat: -1, ease: 'none' });
+        gsap.to(shield.rotation, { 
+          z: Math.PI * 2, 
+          y: Math.PI * 2,
+          duration: 6 + i * 3, 
+          repeat: -1, 
+          ease: 'none' 
+        });
       }
       
-      // Expansion pulse
-      const pulseRingGeo = new THREE.TorusGeometry(10, 0.15, 16, 100);
-      const pulseRingMat = new THREE.MeshBasicMaterial({ color: userColor, transparent: true, opacity: 0.6 });
-      const pulseRing = new THREE.Mesh(pulseRingGeo, pulseRingMat);
-      pulseRing.rotation.x = Math.PI / 2;
-      scene.add(pulseRing);
+      // Infinite expansion pulse wave
+      const createExpansionPulse = () => {
+        const pulseRingGeo = new THREE.TorusGeometry(10, 0.15, 16, 100);
+        const pulseRingMat = new THREE.MeshBasicMaterial({ color: userColor, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+        const pulseRing = new THREE.Mesh(pulseRingGeo, pulseRingMat);
+        pulseRing.rotation.x = Math.PI / 2;
+        scene.add(pulseRing);
+        
+        gsap.to(pulseRing.scale, { 
+          x: 15, y: 15, z: 15, 
+          duration: 3, 
+          ease: 'power2.out',
+          onUpdate: function() {
+            pulseRingMat.opacity = 0.8 * (1 - this.progress());
+          },
+          onComplete: () => {
+            scene.remove(pulseRing);
+            pulseRingGeo.dispose();
+            pulseRingMat.dispose();
+          }
+        });
+      };
       
-      gsap.to(pulseRing.scale, { x: 8, y: 8, z: 8, duration: 3, repeat: -1, ease: 'power3.out' });
-      gsap.to(pulseRingMat, { opacity: 0, duration: 3, repeat: -1, ease: 'power3.out' });
+      setInterval(createExpansionPulse, 1500);
+      createExpansionPulse();
     }
     
     const nodeid = document.getElementById('stat-nodeid');
