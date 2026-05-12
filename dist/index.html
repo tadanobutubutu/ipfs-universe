@@ -11,20 +11,20 @@
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&family=Orbitron:wght@400;700&display=swap');
     :root {
       --color-bg: #04060b;
-      --color-surface: rgba(13, 17, 23, 0.6);
-      --color-border: rgba(255, 255, 255, 0.1);
+      --color-surface: rgba(13, 17, 23, 0.7);
+      --color-border: rgba(88, 166, 255, 0.2);
       --color-text: #f0f6fc;
       --color-text-muted: #8b949e;
       --color-primary: #58a6ff;
-      --color-primary-glow: rgba(88, 166, 255, 0.4);
+      --color-primary-glow: rgba(88, 166, 255, 0.5);
       --color-accent: #3fb950;
       --color-warn: #f0883e;
       --color-error: #f85149;
       --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
       --font-body: 'Inter', system-ui, sans-serif;
       --font-title: 'Orbitron', sans-serif;
-      --radius: 12px;
-      --transition: 300ms cubic-bezier(0.23, 1, 0.32, 1);
+      --radius: 8px;
+      --transition: 400ms cubic-bezier(0.23, 1, 0.32, 1);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { 
@@ -40,113 +40,221 @@
       position: fixed; inset: 0; z-index: 10; pointer-events: none;
       display: grid;
       grid-template-rows: auto 1fr auto;
-      grid-template-columns: 320px 1fr 320px;
-      gap: 20px; padding: 24px;
-      perspective: 1000px;
+      grid-template-columns: 340px 1fr 340px;
+      gap: 24px; padding: 32px;
+      perspective: 2000px;
     }
     .glass {
       background: var(--color-surface);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
       border: 1px solid var(--color-border);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
       border-radius: var(--radius);
+      position: relative;
+      overflow: hidden;
+    }
+    .glass::after {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 100%);
+      pointer-events: none;
     }
     #header {
       grid-column: 1 / -1; pointer-events: all;
       display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 24px;
+      padding: 16px 32px;
       background: var(--color-surface);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(30px) saturate(200%);
+      -webkit-backdrop-filter: blur(30px) saturate(200%);
       border: 1px solid var(--color-border);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
       border-radius: var(--radius);
+      border-bottom: 2px solid var(--color-primary);
     }
     .logo { 
-      display: flex; align-items: center; gap: 14px; 
-      font-family: var(--font-title); font-size: 18px; font-weight: 700; 
+      display: flex; align-items: center; gap: 16px; 
+      font-family: var(--font-title); font-size: 20px; font-weight: 700; 
       color: var(--color-primary);
       text-transform: uppercase;
-      letter-spacing: 0.1em;
-      text-shadow: 0 0 10px var(--color-primary-glow);
+      letter-spacing: 0.2em;
+      text-shadow: 0 0 15px var(--color-primary-glow);
     }
     #renderer-badge {
-      font-family: var(--font-mono); font-size: 10px; padding: 4px 12px;
-      border-radius: 20px; background: rgba(88,166,255,0.1);
-      border: 1px solid rgba(88,166,255,0.2); color: var(--color-primary); 
-      letter-spacing: 0.1em;
+      font-family: var(--font-mono); font-size: 10px; padding: 4px 14px;
+      border-radius: 4px; background: rgba(88,166,255,0.15);
+      border: 1px solid var(--color-primary); color: var(--color-primary); 
+      letter-spacing: 0.15em;
       text-transform: uppercase;
+      box-shadow: 0 0 10px var(--color-primary-glow);
     }
-    #renderer-badge.legacy { background: rgba(240,136,62,0.1); border-color: rgba(240,136,62,0.2); color: var(--color-warn); }
+    #renderer-badge.legacy { background: rgba(240,136,62,0.15); border-color: var(--color-warn); color: var(--color-warn); box-shadow: 0 0 10px rgba(240,136,62,0.3); }
     .panel {
       pointer-events: all;
       background: var(--color-surface);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
       border: 1px solid var(--color-border);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
       border-radius: var(--radius);
-      padding: 20px; font-family: var(--font-mono); font-size: 13px;
-      transition: transform 0.1s ease-out;
+      padding: 24px; font-family: var(--font-mono); font-size: 13px;
+      transition: transform 0.2s ease-out, border-color 0.3s ease;
+      position: relative;
     }
+    .panel:hover { border-color: var(--color-primary); }
     .panel-title { 
       font-family: var(--font-title);
-      font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; 
-      color: var(--color-primary); margin-bottom: 16px; 
-      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase; 
+      color: var(--color-primary); margin-bottom: 20px; 
+      display: flex; align-items: center; justify-content: space-between;
     }
-    .panel-title::before {
-      content: ""; display: block; width: 4px; height: 12px; background: var(--color-primary);
+    .panel-title::after {
+      content: "OP_0x" + Math.random().toString(16).slice(2,6); font-size: 8px; opacity: 0.4;
     }
-    #panel-left  { grid-column: 1; grid-row: 2; align-self: start; }
-    #panel-right { grid-column: 3; grid-row: 2; align-self: start; }
+    #panel-left  { grid-column: 1; grid-row: 2; align-self: start; border-left: 3px solid var(--color-primary); }
+    #panel-right { grid-column: 3; grid-row: 2; align-self: start; border-right: 3px solid var(--color-primary); }
     .stat-row { 
       display: flex; justify-content: space-between; align-items: center; 
-      padding: 8px 0; border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); 
+      padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--color-text-muted); 
     }
     .stat-row:last-child { border-bottom: none; }
-    .stat-val { font-weight: 600; color: var(--color-text); font-family: var(--font-mono); }
-    .stat-val.live { color: var(--color-primary); text-shadow: 0 0 8px var(--color-primary-glow); }
+    .stat-val { font-weight: 600; color: var(--color-text); font-family: var(--font-mono); letter-spacing: 0.05em; }
+    .stat-val.live { color: var(--color-primary); text-shadow: 0 0 10px var(--color-primary-glow); }
     #log {
       grid-column: 1 / -1; grid-row: 3; pointer-events: all;
       background: var(--color-surface);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
       border: 1px solid var(--color-border);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      border-top: 1px solid var(--color-primary);
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
       border-radius: var(--radius);
-      padding: 12px 20px; font-family: var(--font-mono); font-size: 12px;
-      display: flex; gap: 20px; align-items: center; overflow: hidden;
-      min-height: 50px;
+      padding: 16px 24px; font-family: var(--font-mono); font-size: 12px;
+      display: flex; gap: 24px; align-items: center; overflow: hidden;
+      min-height: 60px;
     }
-    #log-label { color: var(--color-primary); flex-shrink: 0; letter-spacing: 0.1em; font-weight: 700; font-family: var(--font-title); font-size: 10px; }
-    #log-entries { display: flex; gap: 24px; overflow: hidden; flex: 1; align-items: center; }
-    .log-entry { white-space: nowrap; font-size: 11px; }
+    #log-label { color: var(--color-primary); flex-shrink: 0; letter-spacing: 0.2em; font-weight: 700; font-family: var(--font-title); font-size: 11px; }
+    #log-entries { display: flex; gap: 32px; overflow: hidden; flex: 1; align-items: center; }
+    .log-entry { white-space: nowrap; font-size: 11px; color: var(--color-text-muted); }
+    .log-entry.ok { color: var(--color-accent); }
+    .log-entry.error { color: var(--color-error); }
+    .log-entry.warn { color: var(--color-warn); }
     .btn {
-      font-family: var(--font-title); font-size: 11px; padding: 8px 20px;
-      border-radius: 6px; border: 1px solid var(--color-border);
-      background: rgba(255,255,255,0.03); color: var(--color-text);
+      font-family: var(--font-title); font-size: 11px; padding: 10px 24px;
+      border-radius: 4px; border: 1px solid var(--color-border);
+      background: rgba(255,255,255,0.05); color: var(--color-text);
       cursor: pointer; transition: all var(--transition);
-      white-space: nowrap; letter-spacing: 0.05em;
+      white-space: nowrap; letter-spacing: 0.1em;
       text-transform: uppercase;
+      position: relative; overflow: hidden;
     }
-    .btn:hover { background: rgba(255,255,255,0.08); border-color: var(--color-primary); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-    .btn.primary { background: rgba(88,166,255,0.1); border-color: rgba(88,166,255,0.3); color: var(--color-primary); }
-    .btn.primary:hover { background: rgba(88,166,255,0.2); box-shadow: 0 0 15px var(--color-primary-glow); }
-    .renderer-toggle { font-size: 10px !important; padding: 4px 10px !important; border-radius: 20px !important; letter-spacing: 0; }
-    .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-muted); margin-right: 8px; }
-    .dot.live { background: var(--color-primary); box-shadow: 0 0 8px var(--color-primary); animation: pulse 2s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-    #legacy-tooltip {
-      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
-      background: rgba(240,136,62,0.15); border: 1px solid rgba(240,136,62,0.4);
-      color: var(--color-warn); font-family: var(--font-mono); font-size: 11px;
-      padding: 8px 16px; border-radius: 6px; display: none; z-index: 100; text-align: center;
+    .btn::before {
+      content: ""; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      transition: 0.5s;
     }
+    .btn:hover::before { left: 100%; }
+    .btn:hover { background: rgba(255,255,255,0.1); border-color: var(--color-primary); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--color-primary); color: var(--color-primary); }
+    .btn.primary:hover { background: rgba(88,166,255,0.25); box-shadow: 0 0 20px var(--color-primary-glow); }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-muted); margin-right: 10px; }
+    .dot.live { background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1; transform: scale(1);} 50%{opacity:0.4; transform: scale(0.8);} }
+    #node-tooltip {
+      position: fixed; pointer-events: none; opacity: 0; z-index: 100;
+      background: rgba(4, 6, 11, 0.95);
+      backdrop-filter: blur(30px) saturate(200%);
+      -webkit-backdrop-filter: blur(30px) saturate(200%);
+      border: 1px solid var(--color-primary);
+      box-shadow: 0 0 50px rgba(88, 166, 255, 0.2), inset 0 0 20px rgba(88, 166, 255, 0.05);
+      border-radius: 4px;
+      padding: 24px; font-family: var(--font-mono); font-size: 11px;
+      color: var(--color-text);
+      transform: translate(-50%, -100%) scale(0.9);
+      transition: opacity 0.4s var(--transition), transform 0.4s var(--transition), border-color 0.3s ease;
+      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%);
+      min-width: 320px;
+      overflow: hidden;
+      border-left: 4px solid var(--color-primary);
+    }
+    .glitch-overlay {
+      position: absolute; inset: 0;
+      background: 
+        repeating-linear-gradient(0deg, rgba(88, 166, 255, 0.05) 0px, rgba(88, 166, 255, 0.05) 1px, transparent 1px, transparent 2px),
+        radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.4) 100%);
+      pointer-events: none;
+      z-index: 1; opacity: 0.6;
+    }
+    #node-tooltip::before {
+      content: "SCANNING_NODE..."; 
+      position: absolute; top: 4px; right: 24px; 
+      font-size: 8px; color: var(--color-primary); 
+      opacity: 0.4; letter-spacing: 0.2em;
+    }
+    .tooltip-scanline {
+      position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+      animation: scanline 4s linear infinite;
+      z-index: 2; opacity: 0.5;
+    }
+    @keyframes scanline { 0% { top: 0; } 100% { top: 100%; } }
+    .tooltip-header {
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid rgba(88, 166, 255, 0.3);
+      padding-bottom: 12px; margin-bottom: 16px;
+      position: relative; z-index: 2;
+    }
+    .tooltip-title { 
+      color: var(--color-primary); font-family: var(--font-title); 
+      font-size: 11px; letter-spacing: 0.3em; font-weight: 700;
+      text-shadow: 0 0 10px var(--color-primary-glow);
+    }
+    .tooltip-body { position: relative; z-index: 2; }
+    .tooltip-row { 
+      display: flex; justify-content: space-between; 
+      margin-top: 10px; border-bottom: 1px solid rgba(255,255,255,0.03); 
+      padding-bottom: 6px; align-items: baseline;
+    }
+    .tooltip-label { color: var(--color-text-muted); text-transform: uppercase; font-size: 9px; letter-spacing: 0.15em; width: 90px; flex-shrink: 0; }
+    .tooltip-val { 
+      color: var(--color-text); font-weight: 600; font-size: 11px; 
+      flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; 
+      white-space: nowrap; font-family: var(--font-mono);
+    }
+    .tooltip-val.live { color: var(--color-primary); text-shadow: 0 0 10px var(--color-primary-glow); }
+    .tooltip-val.id { color: var(--color-accent); font-size: 10px; }
+    .tooltip-val.lat { color: var(--color-warn); }
+    .hud-bars { display: flex; gap: 4px; margin-top: 16px; }
+    .hud-bar { height: 6px; flex: 1; background: rgba(88, 166, 255, 0.1); border-radius: 1px; overflow: hidden; position: relative; }
+    .hud-bar-inner { 
+      height: 100%; width: 0%; 
+      background: linear-gradient(90deg, var(--color-primary), #fff); 
+      box-shadow: 0 0 15px var(--color-primary-glow); 
+      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+    }
+    .throughput-container {
+      margin-top: 16px; display: flex; flex-direction: column; gap: 6px;
+      padding: 12px; background: rgba(255,255,255,0.02); border-radius: 4px;
+    }
+    .mini-graph {
+      display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-top: 4px;
+    }
+    .graph-bar { width: 4px; background: var(--color-primary); opacity: 0.3; border-radius: 1px 1px 0 0; }
+    #tt-progress-container {
+      margin-top: 16px; height: 3px; background: rgba(88,166,255,0.1); 
+      position: relative; overflow: hidden; border-radius: 2px;
+    }
+    #tt-progress { 
+      position: absolute; left: 0; top: 0; height: 100%; width: 30%; 
+      background: var(--color-primary); box-shadow: 0 0 15px var(--color-primary);
+      animation: progress_move 2s infinite linear;
+    }
+    @keyframes progress_move {
+      0% { left: -30%; }
+      100% { left: 100%; }
+    }
+
   </style>
 
-  <script type="module" crossorigin src="/assets/index-B2gtqTil.js"></script>
+  <script type="module" crossorigin src="/assets/index-DdUDPHc3.js"></script>
 </head>
 <body>
 
@@ -225,6 +333,23 @@
     </div>
   </div>
 
+  <div class="panel" id="panel-notion">
+    <div class="panel-title">// notion_hub</div>
+    <div class="stat-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+      <div style="display: flex; width: 100%; gap: 8px;">
+        <input type="text" id="notion-search-input" placeholder="Search pages..." style="flex: 1; background: rgba(0,0,0,0.2); border: 1px solid var(--color-border); border-radius: 4px; padding: 4px 8px; color: var(--color-text); font-family: var(--font-mono); font-size: 11px;">
+        <button class="btn primary" style="padding: 4px 10px;" onclick="notionAction('search')">Search</button>
+      </div>
+      <div style="display: flex; width: 100%; gap: 8px; margin-top: 4px;">
+        <button class="btn" style="flex: 1; padding: 6px;" onclick="notionAction('create')">+ New Page</button>
+        <button class="btn" style="flex: 1; padding: 6px;" onclick="notionAction('comment')">Comment</button>
+      </div>
+    </div>
+    <div id="notion-status" style="margin-top: 12px; font-size: 10px; color: var(--color-text-muted); border-top: 1px solid var(--color-border); padding-top: 8px;">
+      READY_FOR_ADAPTIVE_COLLABORATION
+    </div>
+  </div>
+
   <div id="log">
     <span id="log-label">LOG &gt;</span>
     <div id="log-entries"></div>
@@ -232,6 +357,104 @@
 </div>
 
 <div id="legacy-tooltip"></div>
+<div id="node-tooltip">
+  <div class="glitch-overlay"></div>
+  <div class="tooltip-scanline"></div>
+  <div class="tooltip-header">
+    <span class="tooltip-title">NETWORK_ENTITY_INTEL</span>
+    <span class="dot live"></span>
+  </div>
+  <div class="tooltip-body">
+    <div class="tooltip-row">
+      <span class="tooltip-label">PEER_HASH:</span> 
+      <span id="tt-id" class="tooltip-val id">Qm...</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">LATENCY:</span> 
+      <span id="tt-lat" class="tooltip-val lat">0ms</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">PROTOCOL:</span> 
+      <span id="tt-protocol" class="tooltip-val">QUIC_V1</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">STABILITY:</span> 
+      <span id="tt-stability" class="tooltip-val" style="color: var(--color-accent)">99.9%</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">GATEWAY:</span> 
+      <span id="tt-path" class="tooltip-val">direct-p2p</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">LOCATION:</span> 
+      <span id="tt-loc" class="tooltip-val">UNKNOWN_RELAY</span>
+    </div>
+    <div class="tooltip-row" style="border-bottom: none; margin-top: 15px;">
+      <span class="tooltip-label">ROUTE_MAP:</span> 
+      <div id="tt-route" style="flex: 1; font-size: 8px; color: var(--color-primary); display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;"></div>
+    </div>
+    
+    <div class="throughput-container">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <span class="tooltip-label" style="width: auto;">DATA_FLUX:</span>
+        <span id="tt-traffic" class="tooltip-val live" style="font-size: 12px;">0.00 KB/s</span>
+      </div>
+      <div class="mini-graph" id="tt-graph">
+        <!-- Bars will be added by JS -->
+      </div>
+    </div>
+
+    <div class="hud-bars">
+      <div class="hud-bar"><div class="hud-bar-inner" id="tt-bar-1"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" id="tt-bar-2"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" id="tt-bar-3"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" id="tt-bar-4"></div></div>
+    </div>
+
+    <div style="margin-top: 16px;">
+      <div style="display: flex; justify-content: space-between; font-size: 8px; color: var(--color-text-muted); margin-bottom: 4px;">
+        <span>INGRESS_SIGNAL</span>
+        <span id="tt-rx-val">0%</span>
+      </div>
+      <div style="height: 3px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden; border-radius: 1px;">
+        <div id="tt-rx-bar" style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: var(--color-accent); box-shadow: 0 0 10px var(--color-accent);"></div>
+      </div>
+      
+      <div style="display: flex; justify-content: space-between; font-size: 8px; color: var(--color-text-muted); margin-top: 8px; margin-bottom: 4px;">
+        <span>EGRESS_SIGNAL</span>
+        <span id="tt-tx-val">0%</span>
+      </div>
+      <div style="height: 3px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden; border-radius: 1px;">
+        <div id="tt-tx-bar" style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary);"></div>
+      </div>
+    </div>
+
+    <div id="tt-progress-container">
+      <div id="tt-progress"></div>
+    </div>
+    
+    <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+      <span id="tt-status" class="tooltip-val live" style="font-size: 9px; text-align: left; letter-spacing: 0.1em;">ACTIVE_STREAM</span>
+      <span style="font-size: 8px; opacity: 0.3;">SIG_TYPE: QUANTUM</span>
+    </div>
+  </div>
+</div>
+
+<div id="targeting-reticle" style="position: fixed; pointer-events: none; opacity: 0; z-index: 50; width: 60px; height: 60px; border: 1px solid var(--color-primary); border-radius: 50%; transform: translate(-50%, -50%); transition: opacity 0.3s ease;">
+  <div style="position: absolute; top: -5px; left: 50%; width: 1px; height: 10px; background: var(--color-primary); transform: translateX(-50%);"></div>
+  <div style="position: absolute; bottom: -5px; left: 50%; width: 1px; height: 10px; background: var(--color-primary); transform: translateX(-50%);"></div>
+  <div style="position: absolute; left: -5px; top: 50%; width: 10px; height: 1px; background: var(--color-primary); transform: translateY(-50%);"></div>
+  <div style="position: absolute; right: -5px; top: 50%; width: 10px; height: 1px; background: var(--color-primary); transform: translateY(-50%);"></div>
+  <div style="position: absolute; inset: 5px; border: 1px dashed var(--color-primary); border-radius: 50%; opacity: 0.3; animation: rotate 4s linear infinite;"></div>
+</div>
+
+<style>
+  @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes progress_sim {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+</style>
 
 
 </body>
