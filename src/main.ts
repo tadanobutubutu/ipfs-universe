@@ -249,7 +249,7 @@ function initWorker() {
       const peerData = { ...peer, connectedAt: new Date().toISOString() };
       await savePeer(peerData);
       updateStoredCount();
-      addPeerNode(peer.peerId, peer.latency);
+      addPeerNode(peer.peerId, peer.latency, peer.gatewayUsed);
       
       // Dynamic core reaction
       gsap.to(coreMat, { opacity: 1, duration: 0.1, yoyo: true, repeat: 3 });
@@ -378,40 +378,45 @@ function createDataPulse(peerId: string) {
   const node = peerNodes.get(peerId);
   if (!node) return;
 
-  const pulseGeo = new THREE.SphereGeometry(0.8, 8, 8);
-  const pulseMat = new THREE.MeshBasicMaterial({ 
-    color: 0x58a6ff, 
-    transparent: true, 
-    opacity: 1,
-    blending: THREE.AdditiveBlending 
-  });
-  const pulse = new THREE.Mesh(pulseGeo, pulseMat);
-  scene.add(pulse);
+  const pulseCount = 3;
+  for (let i = 0; i < pulseCount; i++) {
+    const pulseGeo = new THREE.SphereGeometry(0.6, 8, 8);
+    const pulseMat = new THREE.MeshBasicMaterial({ 
+      color: 0x58a6ff, 
+      transparent: true, 
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending 
+    });
+    const pulse = new THREE.Mesh(pulseGeo, pulseMat);
+    scene.add(pulse);
 
-  const start = new THREE.Vector3(0, 0, 0);
-  const end = node.targetPos;
+    const start = new THREE.Vector3(0, 0, 0);
+    const end = node.targetPos;
 
-  gsap.to(pulse.position, {
-    x: end.x,
-    y: end.y,
-    z: end.z,
-    duration: 1 + Math.random(),
-    ease: "power2.inOut",
-    onUpdate: () => {
-      // Scale pulse during travel
-      const dist = pulse.position.distanceTo(start);
-      const totalDist = end.length();
-      const scale = Math.sin((dist / totalDist) * Math.PI) * 2 + 0.5;
-      pulse.scale.set(scale, scale, scale);
-    },
-    onComplete: () => {
-      scene.remove(pulse);
-      pulseGeo.dispose();
-      pulseMat.dispose();
-      // Secondary pulse at node
-      gsap.to(node.mesh.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 0.2, yoyo: true, repeat: 1 });
-    }
-  });
+    gsap.to(pulse.position, {
+      x: end.x,
+      y: end.y,
+      z: end.z,
+      duration: 1.2 + (i * 0.2),
+      delay: i * 0.15,
+      ease: "power2.inOut",
+      onUpdate: () => {
+        const dist = pulse.position.distanceTo(start);
+        const totalDist = end.length();
+        const scale = Math.sin((dist / totalDist) * Math.PI) * 1.5 + 0.3;
+        pulse.scale.set(scale, scale, scale);
+        (pulse.material as THREE.MeshBasicMaterial).opacity = 1 - (dist / totalDist);
+      },
+      onComplete: () => {
+        scene.remove(pulse);
+        pulseGeo.dispose();
+        pulseMat.dispose();
+        if (i === pulseCount - 1) {
+          gsap.to(node.mesh.scale, { x: 1.5, y: 1.5, z: 1.5, duration: 0.2, yoyo: true, repeat: 1 });
+        }
+      }
+    });
+  }
 }
 
 // ─── Animation
@@ -469,31 +474,43 @@ function animate() {
       r: userColor.r, g: userColor.g, b: userColor.b,
     });
     
-    // Metamask aura effects
+    // Enhanced Metamask aura effects
     if (coreAura) {
       gsap.to((coreAura.material as THREE.MeshBasicMaterial).color, {
         duration: 1.5,
         r: userColor.r, g: userColor.g, b: userColor.b,
       });
-      gsap.to(coreAura.material as THREE.MeshBasicMaterial, { opacity: 0.6, duration: 1.5 });
+      gsap.to(coreAura.material as THREE.MeshBasicMaterial, { opacity: 0.8, duration: 1.5 });
       
-      // More dynamic aura
+      // Layered complex aura
       const auraTimeline = gsap.timeline({ repeat: -1 });
       auraTimeline
-        .to(coreAura.scale, { x: 1.4, y: 1.4, z: 1.4, duration: 2, ease: 'sine.inOut' })
-        .to(coreAura.scale, { x: 1.1, y: 1.1, z: 1.1, duration: 2, ease: 'sine.inOut' });
+        .to(coreAura.scale, { x: 1.6, y: 1.6, z: 1.6, duration: 1.5, ease: 'sine.inOut' })
+        .to(coreAura.scale, { x: 1.2, y: 1.2, z: 1.2, duration: 1.5, ease: 'sine.inOut' });
       
-      gsap.to(coreAura.rotation, { y: Math.PI * 2, duration: 10, repeat: -1, ease: 'none' });
+      gsap.to(coreAura.rotation, { x: Math.PI * 2, y: Math.PI * 2, duration: 15, repeat: -1, ease: 'none' });
+
+      // Shield effect (Multiple Rings)
+      for (let i = 0; i < 3; i++) {
+        const shieldGeo = new THREE.TorusGeometry(12 + i * 2, 0.1, 16, 100);
+        const shieldMat = new THREE.MeshBasicMaterial({ color: userColor, transparent: true, opacity: 0.2 - (i * 0.05) });
+        const shield = new THREE.Mesh(shieldGeo, shieldMat);
+        shield.rotation.x = Math.PI / 2;
+        shield.rotation.y = (Math.PI / 4) * i;
+        scene.add(shield);
+        
+        gsap.to(shield.rotation, { z: Math.PI * 2, duration: 5 + i * 2, repeat: -1, ease: 'none' });
+      }
       
-      // Add a secondary pulse ring for the wallet connection
-      const pulseRingGeo = new THREE.TorusGeometry(12, 0.1, 16, 100);
-      const pulseRingMat = new THREE.MeshBasicMaterial({ color: userColor, transparent: true, opacity: 0.5 });
+      // Expansion pulse
+      const pulseRingGeo = new THREE.TorusGeometry(10, 0.15, 16, 100);
+      const pulseRingMat = new THREE.MeshBasicMaterial({ color: userColor, transparent: true, opacity: 0.6 });
       const pulseRing = new THREE.Mesh(pulseRingGeo, pulseRingMat);
       pulseRing.rotation.x = Math.PI / 2;
       scene.add(pulseRing);
       
-      gsap.to(pulseRing.scale, { x: 5, y: 5, z: 5, duration: 4, repeat: -1, ease: 'power2.out' });
-      gsap.to(pulseRingMat, { opacity: 0, duration: 4, repeat: -1, ease: 'power2.out' });
+      gsap.to(pulseRing.scale, { x: 8, y: 8, z: 8, duration: 3, repeat: -1, ease: 'power3.out' });
+      gsap.to(pulseRingMat, { opacity: 0, duration: 3, repeat: -1, ease: 'power3.out' });
     }
     
     const nodeid = document.getElementById('stat-nodeid');
@@ -518,7 +535,7 @@ function animate() {
 };
 
 // ─── Peer Node Real-time Sync
-function addPeerNode(peerId: string, latency: number = 20) {
+function addPeerNode(peerId: string, latency: number = 20, gatewayUsed: string = 'libp2p-direct') {
   if (peerNodes.has(peerId)) return;
   const r = 60 + Math.random() * 50;
   const theta = Math.random() * Math.PI * 2;
@@ -545,7 +562,7 @@ function addPeerNode(peerId: string, latency: number = 20) {
   peerGroup.add(line);
   
   // Attach user data for raycaster
-  mesh.userData = { peerId, latency, gatewayUsed: 'libp2p-direct' };
+  mesh.userData = { peerId, latency, gatewayUsed };
   
   peerNodes.set(peerId, { mesh, line, targetPos });
 
