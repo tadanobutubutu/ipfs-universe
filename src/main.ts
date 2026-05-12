@@ -111,11 +111,13 @@ window.addEventListener('click', (e) => {
 });
 
 function showTooltip(x: number, y: number, data: any, persistent = false) {
+  const ttPath = document.getElementById('tt-path') as HTMLSpanElement;
   ttEl.style.opacity = '1';
   ttEl.style.left = x + 'px';
   ttEl.style.top = y + 'px';
-  ttId.textContent = data.peerId; // Full ID if possible, or just longer
+  ttId.textContent = data.peerId; 
   ttLat.textContent = data.latency + 'ms';
+  if (ttPath) ttPath.textContent = data.gatewayUsed || 'libp2p-direct';
   
   if (persistent) {
     ttEl.style.borderColor = 'var(--color-accent)';
@@ -543,7 +545,7 @@ function addPeerNode(peerId: string, latency: number = 20) {
   peerGroup.add(line);
   
   // Attach user data for raycaster
-  mesh.userData = { peerId, latency };
+  mesh.userData = { peerId, latency, gatewayUsed: 'libp2p-direct' };
   
   peerNodes.set(peerId, { mesh, line, targetPos });
 
