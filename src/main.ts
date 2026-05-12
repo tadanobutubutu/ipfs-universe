@@ -22,6 +22,7 @@ const peerNodes = new Map<string, { mesh: THREE.Mesh, line: THREE.Line, targetPo
 let peerGroup: THREE.Group;
 const peerNodeMat = new THREE.MeshBasicMaterial({ color: 0x3fb950, wireframe: true, transparent: true, opacity: 0 });
 const peerLineMat = new THREE.LineBasicMaterial({ color: 0x3fb950, transparent: true, opacity: 0 });
+let coreMesh: THREE.Mesh;
 
 async function loadWasm() {
   const response = await fetch('/particles.wasm');
@@ -340,8 +341,22 @@ function setupScene() {
 
 
   // Holographic Core
-  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(8, 1), coreMat);
-  scene.add(core);
+  coreMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(8, 1), coreMat);
+  scene.add(coreMesh);
+  
+  // Add a secondary glow layer to the core
+  const coreGlowGeo = new THREE.IcosahedronGeometry(8.5, 1);
+  const coreGlowMat = new THREE.MeshBasicMaterial({ 
+    color: 0x58a6ff, 
+    wireframe: true, 
+    transparent: true, 
+    opacity: 0.2,
+    blending: THREE.AdditiveBlending 
+  });
+  const coreGlow = new THREE.Mesh(coreGlowGeo, coreGlowMat);
+  coreMesh.add(coreGlow);
+  
+  gsap.to(coreGlow.scale, { x: 1.1, y: 1.1, z: 1.1, duration: 2, repeat: -1, yoyo: true, ease: "sine.inOut" });
 
   // Core Aura (Metamask feature)
   coreAura = new THREE.Mesh(
@@ -576,7 +591,12 @@ function pulseNode(peerId: string) {
   if (!node) return;
   gsap.to(node.mesh.scale, { x: 1.8, y: 1.8, z: 1.8, duration: 0.2, yoyo: true, repeat: 1 });
   gsap.to((node.line.material as THREE.LineBasicMaterial), { opacity: 0.8, duration: 0.2, yoyo: true, repeat: 1 });
+  
+  // Core reaction
   gsap.to(coreMat, { opacity: 1, duration: 0.2, yoyo: true, repeat: 1 });
+  if (coreMesh) {
+    gsap.to(coreMesh.scale, { x: 1.1, y: 1.1, z: 1.1, duration: 0.15, yoyo: true, repeat: 1, ease: "power2.out" });
+  }
 }
 
 function removePeerNode(peerId: string) {
