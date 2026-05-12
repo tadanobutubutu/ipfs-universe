@@ -184,7 +184,7 @@
       transform: translate(-50%, -100%) scale(0.9);
       transition: opacity 0.3s var(--transition), transform 0.3s var(--transition), border-color 0.3s ease;
       clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
-      min-width: 260px;
+      min-width: 280px;
       overflow: hidden;
     }
     
@@ -211,13 +211,18 @@
     }
     .tooltip-title { color: var(--color-primary); font-family: var(--font-title); font-size: 10px; letter-spacing: 0.2em; font-weight: 700; }
     .tooltip-body { position: relative; z-index: 2; }
-    .tooltip-ver { font-size: 8px; opacity: 0.4; color: var(--color-text-muted); }
     
-    .tooltip-row { display: flex; justify-content: space-between; margin-top: 8px; }
-    .tooltip-label { color: var(--color-text-muted); text-transform: uppercase; font-size: 9px; letter-spacing: 0.1em; }
-    .tooltip-val { color: var(--color-text); font-weight: 600; font-size: 11px; }
+    .tooltip-row { display: flex; justify-content: space-between; margin-top: 8px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 4px; }
+    .tooltip-label { color: var(--color-text-muted); text-transform: uppercase; font-size: 9px; letter-spacing: 0.1em; width: 80px; }
+    .tooltip-val { color: var(--color-text); font-weight: 600; font-size: 11px; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tooltip-val.live { color: var(--color-primary); text-shadow: 0 0 10px var(--color-primary-glow); }
     .tooltip-val.id { color: var(--color-accent); font-size: 10px; }
     .tooltip-val.lat { color: var(--color-warn); }
+
+    .hud-bars { display: flex; gap: 2px; margin-top: 12px; }
+    .hud-bar { height: 4px; flex: 1; background: rgba(88, 166, 255, 0.1); border-radius: 1px; overflow: hidden; }
+    .hud-bar-inner { height: 100%; width: 0%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary-glow); transition: width 0.3s ease; }
+
   </style>
 
 </head>
@@ -329,18 +334,27 @@
     <span class="dot live"></span>
   </div>
   <div class="tooltip-body">
-    <div class="stat-row"><span>ID:</span> <span id="tt-id" class="stat-val" style="font-size: 9px; opacity: 0.8;">...</span></div>
-    <div class="stat-row"><span>LATENCY:</span> <span id="tt-lat" class="stat-val live">...</span></div>
-    <div class="stat-row"><span>PATH:</span> <span id="tt-path" class="stat-val">...</span></div>
-    <div class="stat-row"><span>LOCATION:</span> <span id="tt-loc" class="stat-val">UNKNOWN_RELAY</span></div>
-    <div class="stat-row"><span>STREAM:</span> <span id="tt-status" class="stat-val">DISCOVERING</span></div>
-    <div class="stat-row" style="margin-top: 8px;">
-      <div style="width: 100%; height: 2px; background: rgba(88,166,255,0.1); position: relative;">
-        <div id="tt-progress" style="position: absolute; left: 0; top: 0; height: 100%; width: 30%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary);"></div>
-      </div>
+    <div class="tooltip-row"><span class="tooltip-label">NODE_ID:</span> <span id="tt-id" class="tooltip-val id">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">LATENCY:</span> <span id="tt-lat" class="tooltip-val lat">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">PROTOCOL:</span> <span id="tt-protocol" class="tooltip-val">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">STABILITY:</span> <span id="tt-stability" class="tooltip-val" style="color: var(--color-accent)">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">ROUTING:</span> <span id="tt-path" class="tooltip-val">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">GEOLOC:</span> <span id="tt-loc" class="tooltip-val">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">STATUS:</span> <span id="tt-status" class="tooltip-val live">...</span></div>
+    
+    <div class="hud-bars">
+      <div class="hud-bar"><div class="hud-bar-inner" style="width: 70%"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" style="width: 40%"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" style="width: 90%"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" style="width: 20%"></div></div>
+    </div>
+
+    <div style="margin-top: 12px; height: 2px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden;">
+      <div id="tt-progress" style="position: absolute; left: 0; top: 0; height: 100%; width: 30%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary);"></div>
     </div>
   </div>
 </div>
+
 
 <style>
   @keyframes progress_sim {

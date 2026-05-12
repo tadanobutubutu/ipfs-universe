@@ -116,14 +116,14 @@ function showTooltip(x: number, y: number, data: any, persistent = false) {
   const ttStatus = document.getElementById('tt-status') as HTMLSpanElement;
   const ttLoc = document.getElementById('tt-loc') as HTMLSpanElement;
   const ttProgress = document.getElementById('tt-progress') as HTMLDivElement;
+  const hudBars = document.querySelectorAll('.hud-bar-inner') as NodeListOf<HTMLDivElement>;
   
   gsap.to(ttEl, { 
     opacity: 1, 
     duration: 0.3, 
-    scale: persistent ? 1.05 : 1,
+    scale: persistent ? 1.02 : 1,
     ease: "back.out(1.7)",
     onStart: () => {
-      // Glitch effect on appearance
       const overlay = ttEl.querySelector('.glitch-overlay') as HTMLElement;
       if (overlay) {
         gsap.fromTo(overlay, { opacity: 0.8 }, { opacity: 0.1, duration: 0.5, repeat: 1, yoyo: true });
@@ -142,25 +142,41 @@ function showTooltip(x: number, y: number, data: any, persistent = false) {
     ttLoc.textContent = data.location || locs[Math.floor(Math.random() * locs.length)];
   }
   
+  // High-fidelity HUD additions
+  const ttProtocol = document.getElementById('tt-protocol');
+  const ttStability = document.getElementById('tt-stability');
+  if (ttProtocol) {
+    const protocols = ['QUIC_V1', 'TCP/TLS', 'WS/NOISE', 'WTRC/SIGNAL'];
+    ttProtocol.textContent = protocols[Math.floor(Math.random() * protocols.length)];
+  }
+  if (ttStability) {
+    const stability = (Math.random() * 20 + 80).toFixed(2);
+    ttStability.textContent = stability + '%';
+  }
+  
   if (ttStatus) {
     ttStatus.textContent = persistent ? 'LOCKED_ON' : 'ACTIVE_STREAM';
     ttStatus.style.color = persistent ? 'var(--color-accent)' : 'var(--color-primary)';
   }
 
+  // Randomize HUD bars for "real-time data" look
+  hudBars.forEach(bar => {
+    gsap.to(bar, { width: (Math.random() * 80 + 20) + '%', duration: 0.4 });
+  });
+
   if (ttProgress) {
-    gsap.fromTo(ttProgress, { width: '0%' }, { width: '100%', duration: 1.5, ease: "power1.inOut", repeat: -1 });
+    gsap.fromTo(ttProgress, { x: '-100%' }, { x: '200%', duration: 1.5, ease: "none", repeat: -1 });
   }
   
   if (persistent) {
     ttEl.style.borderColor = 'var(--color-accent)';
     ttEl.style.boxShadow = '0 0 40px rgba(63, 185, 80, 0.4), inset 0 0 20px rgba(63, 185, 80, 0.1)';
-    ttEl.style.background = 'rgba(4, 11, 8, 0.95)';
   } else {
     ttEl.style.borderColor = 'var(--color-primary)';
     ttEl.style.boxShadow = '0 0 30px rgba(88, 166, 255, 0.3), inset 0 0 15px rgba(88, 166, 255, 0.05)';
-    ttEl.style.background = 'rgba(4, 6, 11, 0.9)';
   }
 }
+
 
 window.addEventListener('mousemove', (e) => {
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -256,6 +272,10 @@ async function init() {
 
 function initWorker() {
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  
+  // Initialize worker with relative path support for Vite
+  worker = new Worker(new URL('./helia.worker.ts', import.meta.url), { type: 'module' });
+  
   worker.postMessage({ type: 'init', data: { sharedBuffer, isLocal } });
 
   worker.onmessage = async (e) => {
@@ -431,8 +451,11 @@ function createDataPulse(peerId: string) {
   const pulseCount = 3;
   const userColor = coreAura ? (coreAura.material as THREE.MeshBasicMaterial).color : new THREE.Color(0x58a6ff);
 
+  // Core shockwave
+  gsap.to(coreMesh.scale, { x: 1.2, y: 1.2, z: 1.2, duration: 0.1, yoyo: true, repeat: 1 });
+
   for (let i = 0; i < pulseCount; i++) {
-    // 1. Particle pulse (Energy flow)
+    // 1. Particle pulse (Energy flow from core to node)
     const pulseGeo = new THREE.SphereGeometry(0.8, 8, 8);
     const pulseMat = new THREE.MeshBasicMaterial({ 
       color: userColor, 
@@ -450,16 +473,16 @@ function createDataPulse(peerId: string) {
       x: end.x,
       y: end.y,
       z: end.z,
-      duration: 1.0 + (i * 0.3),
+      duration: 1.2 + (i * 0.3),
       delay: i * 0.1,
       ease: "power2.in",
       onUpdate: () => {
         const dist = pulse.position.distanceTo(start);
         const totalDist = end.length();
         const progress = dist / totalDist;
-        const scale = Math.sin(progress * Math.PI) * 3.0 + 0.5;
+        const scale = Math.sin(progress * Math.PI) * 4.0 + 0.5;
         pulse.scale.set(scale, scale, scale);
-        pulseMat.opacity = Math.sin(progress * Math.PI) * 0.8;
+        pulseMat.opacity = Math.sin(progress * Math.PI) * 0.9;
       },
       onComplete: () => {
         scene.remove(pulse);
@@ -471,7 +494,7 @@ function createDataPulse(peerId: string) {
     // 2. Wave pulse (Expanding shockwave at target)
     if (i === 0) {
       setTimeout(() => {
-        const shockGeo = new THREE.RingGeometry(0.5, 1.5, 32);
+        const shockGeo = new THREE.RingGeometry(0.5, 2.0, 32);
         const shockMat = new THREE.MeshBasicMaterial({ 
           color: userColor, 
           transparent: true, 
@@ -484,19 +507,62 @@ function createDataPulse(peerId: string) {
         shock.lookAt(new THREE.Vector3(0,0,0));
         scene.add(shock);
         
-        gsap.to(shock.scale, { x: 12, y: 12, z: 12, duration: 1.2, ease: "expo.out" });
-        gsap.to(shockMat, { opacity: 0, duration: 1.2, ease: "expo.out", onComplete: () => {
+        gsap.to(shock.scale, { x: 15, y: 15, z: 15, duration: 1.5, ease: "expo.out" });
+        gsap.to(shockMat, { opacity: 0, duration: 1.5, ease: "expo.out", onComplete: () => {
           scene.remove(shock);
           shockGeo.dispose();
           shockMat.dispose();
         }});
         
-        // Also pulse the node itself
+        // Node pulse
         pulseNode(peerId);
-      }, 900);
+
+        // Inter-node pulse (Pulse to another random node)
+        if (peerNodes.size > 1) {
+          const others = Array.from(peerNodes.keys()).filter(id => id !== peerId);
+          const nextPeerId = others[Math.floor(Math.random() * others.length)];
+          createInterNodePulse(peerId, nextPeerId);
+        }
+      }, 1100);
     }
   }
 }
+
+function createInterNodePulse(fromId: string, toId: string) {
+  const from = peerNodes.get(fromId);
+  const to = peerNodes.get(toId);
+  if (!from || !to) return;
+
+  const pulseGeo = new THREE.SphereGeometry(0.5, 8, 8);
+  const pulseMat = new THREE.MeshBasicMaterial({ 
+    color: 0x3fb950, 
+    transparent: true, 
+    opacity: 1.0,
+    blending: THREE.AdditiveBlending 
+  });
+  const pulse = new THREE.Mesh(pulseGeo, pulseMat);
+  scene.add(pulse);
+
+  pulse.position.copy(from.targetPos);
+
+  gsap.to(pulse.position, {
+    x: to.targetPos.x,
+    y: to.targetPos.y,
+    z: to.targetPos.z,
+    duration: 1.5,
+    ease: "power1.inOut",
+    onUpdate: () => {
+      pulseMat.opacity = 0.8;
+    },
+    onComplete: () => {
+      scene.remove(pulse);
+      pulseGeo.dispose();
+      pulseMat.dispose();
+      pulseNode(toId);
+    }
+  });
+}
+
 
 // ─── Animation
 let frameCount = 0, lastFpsTime = performance.now(), startTime = performance.now();
@@ -586,6 +652,12 @@ function animate() {
       const fluxPoints = new THREE.Points(fluxGeo, fluxMat);
       coreMesh.add(fluxPoints);
       gsap.to(fluxPoints.rotation, { y: Math.PI * 2, duration: 5, repeat: -1, ease: "none" });
+
+      // Dynamic Core Geometry Evolution
+      const newGeo = new THREE.TorusKnotGeometry(6, 1.5, 100, 16);
+      coreMesh.geometry.dispose();
+      coreMesh.geometry = newGeo;
+      gsap.from(coreMesh.scale, { x: 0, y: 0, z: 0, duration: 1.5, ease: "elastic.out(1, 0.3)" });
 
       // Shield effect (Multiple Rotating Rings)
       for (let i = 0; i < 4; i++) {
