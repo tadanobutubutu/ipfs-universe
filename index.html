@@ -7,8 +7,8 @@
   <meta name="description" content="A real-time 3D visualization of the IPFS network powered by Three.js and public IPFS gateways." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&family=Orbitron:wght@400;700&display=swap');
     :root {
       --color-bg: #04060b;
       --color-surface: rgba(13, 17, 23, 0.6);
@@ -144,6 +144,7 @@
     .btn:hover { background: rgba(255,255,255,0.08); border-color: var(--color-primary); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     .btn.primary { background: rgba(88,166,255,0.1); border-color: rgba(88,166,255,0.3); color: var(--color-primary); }
     .btn.primary:hover { background: rgba(88,166,255,0.2); box-shadow: 0 0 15px var(--color-primary-glow); }
+    .renderer-toggle { font-size: 10px !important; padding: 4px 10px !important; border-radius: 20px !important; letter-spacing: 0; }
 
     .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-muted); margin-right: 8px; }
     .dot.live { background: var(--color-primary); box-shadow: 0 0 8px var(--color-primary); animation: pulse 2s infinite; }
@@ -154,9 +155,26 @@
       color: var(--color-warn); font-family: var(--font-mono); font-size: 11px;
       padding: 8px 16px; border-radius: 6px; display: none; z-index: 100; text-align: center;
     }
+    
+    #node-tooltip {
+      position: fixed; pointer-events: none; opacity: 0; z-index: 100;
+      background: var(--color-surface);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--color-primary);
+      box-shadow: 0 4px 16px rgba(88,166,255,0.2);
+      border-radius: var(--radius);
+      padding: 12px; font-family: var(--font-mono); font-size: 11px;
+      color: var(--color-text);
+      transform: translate(-50%, -100%);
+      margin-top: -15px;
+      transition: opacity 0.2s ease-out;
+    }
+    .tooltip-title { color: var(--color-primary); font-weight: bold; margin-bottom: 4px; font-family: var(--font-title); letter-spacing: 0.05em; font-size: 10px; }
+    .tooltip-row { display: flex; justify-content: space-between; gap: 16px; margin-top: 4px; color: var(--color-text-muted); }
+    .tooltip-val { color: var(--color-text); }
   </style>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
 </head>
 <body>
 
@@ -181,9 +199,9 @@
       IPFS_UNIVERSE
     </div>
     <span id="renderer-badge">DETECTING…</span>
+    <button class="btn renderer-toggle" id="btn-renderer-toggle" onclick="toggleRenderer()" title="Switch WebGPU ⇄ WebGL">⇄ GPU</button>
     <div class="header-actions">
       <button class="btn primary" id="btn-wallet" onclick="connectWallet()">&#x2B21; Connect Wallet</button>
-      <button class="btn" id="btn-ipfs" onclick="startIPFSProbe()">&#x25CE; Probe Network</button>
     </div>
   </div>
 
@@ -235,6 +253,23 @@
     </div>
   </div>
 
+  <div class="panel" id="panel-notion">
+    <div class="panel-title">// notion_hub</div>
+    <div class="stat-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+      <div style="display: flex; width: 100%; gap: 8px;">
+        <input type="text" id="notion-search-input" placeholder="Search pages..." style="flex: 1; background: rgba(0,0,0,0.2); border: 1px solid var(--color-border); border-radius: 4px; padding: 4px 8px; color: var(--color-text); font-family: var(--font-mono); font-size: 11px;">
+        <button class="btn primary" style="padding: 4px 10px;" onclick="notionAction('search')">Search</button>
+      </div>
+      <div style="display: flex; width: 100%; gap: 8px; margin-top: 4px;">
+        <button class="btn" style="flex: 1; padding: 6px;" onclick="notionAction('create')">+ New Page</button>
+        <button class="btn" style="flex: 1; padding: 6px;" onclick="notionAction('comment')">Comment</button>
+      </div>
+    </div>
+    <div id="notion-status" style="margin-top: 12px; font-size: 10px; color: var(--color-text-muted); border-top: 1px solid var(--color-border); padding-top: 8px;">
+      READY_FOR_ADAPTIVE_COLLABORATION
+    </div>
+  </div>
+
   <div id="log">
     <span id="log-label">LOG &gt;</span>
     <div id="log-entries"></div>
@@ -242,9 +277,14 @@
 </div>
 
 <div id="legacy-tooltip"></div>
+<div id="node-tooltip">
+  <div class="tooltip-title">PEER_NODE</div>
+  <div class="tooltip-row"><span>ID:</span><span class="tooltip-val" id="tt-id">...</span></div>
+  <div class="tooltip-row"><span>LATENCY:</span><span class="tooltip-val" id="tt-lat">...</span></div>
+  <div class="tooltip-row"><span>STATUS:</span><span class="tooltip-val" id="tt-status" style="color:var(--color-primary)">ACTIVE</span></div>
+</div>
 
 <script type="module" src="./src/main.ts"></script>
 
 </body>
 </html>
-

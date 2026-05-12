@@ -8,12 +8,12 @@ const DB_NAME = 'ipfs-universe-peers';
 const STORE_NAME = 'peer-history';
 const DB_VERSION = 1;
 
-export async function initDB() {
+export async function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
-      const db = event.target.result;
+      const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'peerId' });
       }
@@ -24,7 +24,7 @@ export async function initDB() {
   });
 }
 
-export async function savePeer(peerData) {
+export async function savePeer(peerData: Record<string, unknown>): Promise<void> {
   const db = await initDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -36,7 +36,7 @@ export async function savePeer(peerData) {
   });
 }
 
-export async function getPeerCount() {
+export async function getPeerCount(): Promise<number> {
   const db = await initDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readonly');
@@ -48,7 +48,7 @@ export async function getPeerCount() {
   });
 }
 
-export async function getAllPeers() {
+export async function getAllPeers(): Promise<unknown[]> {
   const db = await initDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORE_NAME], 'readonly');

@@ -4,19 +4,22 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "ipfsuniverse": "vite",
+    "build-wasm": "zig build-lib wasm/particles.zig -target wasm32-freestanding -O ReleaseSmall -femit-bin=public/particles.wasm -rdynamic",
+    "build": "npm run build-wasm && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/three": "^0.184.1",
+    "esbuild": "^0.28.0",
+    "rollup": "^4.60.3",
     "typescript": "^5.3.3",
     "vite": "^8.0.12",
-    "vite-plugin-wasm": "^3.3.0",
-    "vite-plugin-top-level-await": "^1.4.1"
+    "vite-plugin-top-level-await": "^1.4.1",
+    "vite-plugin-wasm": "^3.3.0"
   },
   "dependencies": {
-    "three": "^0.168.0",
     "gsap": "^3.12.5",
-    "idb": "^8.0.0"
+    "three": "^0.168.0"
   }
 }
