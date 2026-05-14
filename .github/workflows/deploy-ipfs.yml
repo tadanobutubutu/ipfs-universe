@@ -36,7 +36,7 @@ jobs:
         id: deploy
         env:
           PINATA_JWT: ${{ secrets.PINATA_JWT }}
-        run: ./scripts/deploy-pinata.sh
+        run: python3 scripts/deploy.py
 
       - name: Update Cloudflare DNS
         env:
