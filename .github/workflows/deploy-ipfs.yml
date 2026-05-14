@@ -33,10 +33,10 @@ jobs:
         run: npm run build
 
       - name: IPFS Pinata Deploy
-        uses: anantaramdas/ipfs-pinata-deploy-action@v1.6.4
+        uses: ipshipyard/ipfs-deploy-action@v1.10.0
         id: deploy
         with:
-          pinata-jwt: ${{ secrets.PINATA_JWT }}
+          pinata-jwt-token: ${{ secrets.PINATA_JWT }}
           path: './dist'
           pin-name: 'ipfs-universe'
 
@@ -54,11 +54,11 @@ jobs:
             curl -X PATCH "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$RECORD_ID" \
               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               -H "Content-Type: application/json" \
-              --data "{\"type\":\"TXT\",\"name\":\"_dnslink\",\"content\":\"dnslink=/ipfs/${{ steps.deploy.outputs.hash }}\"}"
+              --data "{\"type\":\"TXT\",\"name\":\"_dnslink\",\"content\":\"dnslink=/ipfs/${{ steps.deploy.outputs.cid }}\"}"
           else
             echo "Creating new record"
             curl -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               -H "Content-Type: application/json" \
-              --data "{\"type\":\"TXT\",\"name\":\"_dnslink\",\"content\":\"dnslink=/ipfs/${{ steps.deploy.outputs.hash }}\",\"ttl\":1}"
+              --data "{\"type\":\"TXT\",\"name\":\"_dnslink\",\"content\":\"dnslink=/ipfs/${{ steps.deploy.outputs.cid }}\",\"ttl\":1}"
           fi
