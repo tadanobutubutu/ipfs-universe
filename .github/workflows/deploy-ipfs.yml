@@ -31,16 +31,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Pin to Pinata
-        id: pinata
-        run: |
-          # Pinata API supports directory upload via multipart/form-data
-          # But it's easier to use a small node script or an action that works.
-          # Let's try popovoleksandr action but with JWT if it supports it.
-          # Actually, let's use a known working one:
-          # anantaramdas/ipfs-pinata-deploy-action supports pinata-jwt
-          echo "Pinning to Pinata..."
-          
       - name: IPFS Pinata Deploy
         uses: anantaramdas/ipfs-pinata-deploy-action@v1.6.4
         id: deploy
@@ -50,10 +40,24 @@ jobs:
           pin-name: 'ipfs-universe'
 
       - name: Update Cloudflare DNSLink
-        uses: cloudflare/cloudflare-action@v1
-        with:
-          api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          type: 'TXT'
-          name: '_dnslink'
-          content: 'dnslink=/ipfs/${{ steps.deploy.outputs.hash }}'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?name=_dnslink.ipfsuniverse.xyz" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" | jq -r .result[0].id)
+          
+          if [ "$RECORD_ID" != "null" ] && [ "$RECORD_ID" != "" ]; then
+            echo "Updating existing record $RECORD_ID"
+            curl -X PATCH "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$RECORD_ID" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"TXT\",\"name\":\"_dnslink\",\"content\":\"dnslink=/ipfs/${{ steps.deploy.outputs.hash }}\"}"
+          else
+            echo "Creating new record"
+            curl -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"TXT\",\"name\":\"_dnslink\",\"content\":\"dnslink=/ipfs/${{ steps.deploy.outputs.hash }}\",\"ttl\":1}"
+          fi
