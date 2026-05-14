@@ -32,13 +32,30 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: IPFS Pinata Deploy
-        uses: ipshipyard/ipfs-deploy-action@v1.10.0
+      - name: Pinata Deploy
         id: deploy
-        with:
-          pinata-jwt-token: ${{ secrets.PINATA_JWT }}
-          path: './dist'
-          pin-name: 'ipfs-universe'
+        env:
+          PINATA_JWT: ${{ secrets.PINATA_JWT }}
+        run: |
+          # Install Pinata CLI
+          curl -fsSL https://cli.pinata.cloud/install | bash
+          export PATH="$HOME/bin:$PATH"
+          
+          # Auth
+          pinata auth --jwt $PINATA_JWT
+          
+          # Upload
+          # The official CLI outputs JSON by default.
+          # We use --name to set the pin name.
+          OUTPUT=$(pinata upload ./dist --name "ipfs-universe")
+          echo "Pinata Output: $OUTPUT"
+          
+          CID=$(echo "$OUTPUT" | jq -r .cid)
+          if [ "$CID" == "null" ] || [ -z "$CID" ]; then
+            echo "Error: Failed to get CID from Pinata output"
+            exit 1
+          fi
+          echo "cid=$CID" >> $GITHUB_OUTPUT
 
       - name: Update Cloudflare DNSLink
         env:
