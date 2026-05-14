@@ -1,27 +1,28 @@
-import { PinataSDK } from "pinata";
-import fs from "fs";
-import path from "path";
+import pinataSDK from '@pinata/sdk';
+import fs from 'fs';
+import path from 'path';
 
-const pinata = new PinataSDK({
-  pinataJwt: process.env.PINATA_JWT,
-  pinataGateway: "gateway.pinata.cloud",
-});
+// Note: @pinata/sdk is a CommonJS module, so we might need to handle the default export
+const PinataClient = pinataSDK.default || pinataSDK;
+const pinata = new PinataClient({ pinataJWTKey: process.env.PINATA_JWT });
 
 async function deploy() {
   try {
     const distPath = path.resolve("./dist");
     console.log(`Uploading ${distPath} to Pinata...`);
 
-    const upload = await pinata.upload.directory(distPath).addMetadata({
-        name: "ipfs-universe"
+    const result = await pinata.pinFromFS(distPath, {
+      pinataMetadata: {
+        name: 'ipfs-universe'
+      }
     });
 
     console.log("Upload successful!");
-    console.log(`CID: ${upload.IpfsHash}`);
+    console.log(`CID: ${result.IpfsHash}`);
     
     // Output for GitHub Actions
     if (process.env.GITHUB_OUTPUT) {
-      fs.appendFileSync(process.env.GITHUB_OUTPUT, `cid=${upload.IpfsHash}\n`);
+      fs.appendFileSync(process.env.GITHUB_OUTPUT, `cid=${result.IpfsHash}\n`);
     }
   } catch (error) {
     console.error("Upload failed:", error);
