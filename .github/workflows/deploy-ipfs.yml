@@ -39,7 +39,7 @@ jobs:
         run: |
           # Install Pinata CLI
           curl -fsSL https://cli.pinata.cloud/install | bash
-          export PATH="$HOME/bin:$PATH"
+          export PATH="$HOME/.local/share/pinata:$PATH"
           
           # Auth
           pinata auth --jwt $PINATA_JWT
