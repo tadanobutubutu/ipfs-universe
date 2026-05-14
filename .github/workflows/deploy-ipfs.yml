@@ -1,10 +1,8 @@
 name: Deploy to IPFS via Pinata
 
-
 on:
   push:
     branches: [main]
-
 
 jobs:
   deploy:
@@ -12,11 +10,9 @@ jobs:
     permissions:
       contents: read
 
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -24,20 +20,40 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
 
       - name: Install dependencies
         run: npm ci
 
-
       - name: Build
         run: npm run build
 
-
       - name: Pin to Pinata
-        uses: anantaramdas/ipfs-pinata-deploy-action@v1.6.4
         id: pinata
+        run: |
+          # Pinata API supports directory upload via multipart/form-data
+          # But it's easier to use a small node script or an action that works.
+          # Let's try popovoleksandr action but with JWT if it supports it.
+          # Actually, let's use a known working one:
+          # anantaramdas/ipfs-pinata-deploy-action supports pinata-jwt
+          echo "Pinning to Pinata..."
+          
+      - name: IPFS Pinata Deploy
+        uses: anantaramdas/ipfs-pinata-deploy-action@v1.6.4
+        id: deploy
         with:
           pinata-jwt: ${{ secrets.PINATA_JWT }}
           path: './dist'
           pin-name: 'ipfs-universe'
 
+      - name: Update Cloudflare DNSLink
+        uses: cloudflare/cloudflare-action@v1
+        with:
+          api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          type: 'TXT'
+          name: '_dnslink'
+          content: 'dnslink=/ipfs/${{ steps.deploy.outputs.hash }}'
