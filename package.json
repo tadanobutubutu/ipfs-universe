@@ -10,10 +10,8 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@pinata/sdk": "^2.1.0",
     "@types/three": "^0.184.1",
     "esbuild": "^0.28.0",
-    "pinata": "^2.5.6",
     "pinata-web3": "^0.5.4",
     "rollup": "^4.60.3",
     "typescript": "^5.3.3",
