@@ -1,0 +1,75 @@
+name: Deploy to IPFS via Pinata
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Pin to Pinata
+        uses: pinata/github-action@v0.1.9
+        id: pinata
+        with:
+          pinata_jwt: ${{ secrets.PINATA_JWT }}
+          path: './dist'
+          pinata_pin_name: 'ipfs-universe'
+
+      - name: Update Cloudflare DNSLink
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          DOMAIN: "ipfsuniverse.xyz"
+          CID: ${{ steps.pinata.outputs.hash }}
+        run: |
+          RECORD_NAME="_dnslink.${DOMAIN}"
+          CONTENT="dnslink=/ipfs/${CID}"
+          
+          echo "Updating ${RECORD_NAME} to ${CONTENT}..."
+          
+          # 既存のレコード ID を取得
+          RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=${RECORD_NAME}&type=TXT" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" | jq -r '.result[0].id')
+          
+          if [ "$RECORD_ID" != "null" ] && [ "$RECORD_ID" != "" ]; then
+            # 更新
+            curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${RECORD_ID}" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"TXT\",\"name\":\"${RECORD_NAME}\",\"content\":\"${CONTENT}\",\"ttl\":1}"
+          else
+            # 新規作成
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"TXT\",\"name\":\"${RECORD_NAME}\",\"content\":\"${CONTENT}\",\"ttl\":1}"
+          fi
+          
+          echo "✅ DNSLink 更新完了"
+
+      - name: Output CID
+        run: |
+          echo "✅ デプロイ完了"
+          echo "CID: ${{ steps.pinata.outputs.hash }}"
+          echo "URL: https://gateway.pinata.cloud/ipfs/${{ steps.pinata.outputs.hash }}"
+          echo "DNSLink Domain: ipfsuniverse.xyz"
