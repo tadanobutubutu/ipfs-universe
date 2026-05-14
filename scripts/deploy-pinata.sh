@@ -17,7 +17,7 @@ export PATH="$HOME/.local/share/pinata:$PATH"
 
 # Auth
 echo "Authenticating..."
-pinata auth --jwt "$PINATA_JWT"
+pinata auth "$PINATA_JWT"
 
 # Upload
 echo "Uploading $DIST_DIR..."
