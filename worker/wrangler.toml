@@ -1,0 +1,7 @@
+name = "ipfs-universe-gateway"
+main = "src/index.js"
+compatibility_date = "2024-05-15"
+
+routes = [
+  { pattern = "*ipfsuniverse.xyz/*", zone_name = "ipfsuniverse.xyz" }
+]
