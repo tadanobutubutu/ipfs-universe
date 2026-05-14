@@ -160,101 +160,54 @@
     @keyframes pulse { 0%,100%{opacity:1; transform: scale(1);} 50%{opacity:0.4; transform: scale(0.8);} }
     #node-tooltip {
       position: fixed; pointer-events: none; opacity: 0; z-index: 100;
-      background: rgba(4, 6, 11, 0.95);
-      backdrop-filter: blur(30px) saturate(200%);
-      -webkit-backdrop-filter: blur(30px) saturate(200%);
+      background: rgba(4, 6, 11, 0.9);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
       border: 1px solid var(--color-primary);
-      box-shadow: 0 0 50px rgba(88, 166, 255, 0.2), inset 0 0 20px rgba(88, 166, 255, 0.05);
-      border-radius: 4px;
-      padding: 24px; font-family: var(--font-mono); font-size: 11px;
+      box-shadow: 0 0 30px rgba(88, 166, 255, 0.3), inset 0 0 15px rgba(88, 166, 255, 0.05);
+      border-radius: 2px;
+      padding: 20px; font-family: var(--font-mono); font-size: 11px;
       color: var(--color-text);
       transform: translate(-50%, -100%) scale(0.9);
-      transition: opacity 0.4s var(--transition), transform 0.4s var(--transition), border-color 0.3s ease;
-      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%);
-      min-width: 320px;
+      transition: opacity 0.3s var(--transition), transform 0.3s var(--transition), border-color 0.3s ease;
+      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
+      min-width: 280px;
       overflow: hidden;
-      border-left: 4px solid var(--color-primary);
     }
     .glitch-overlay {
       position: absolute; inset: 0;
-      background: 
-        repeating-linear-gradient(0deg, rgba(88, 166, 255, 0.05) 0px, rgba(88, 166, 255, 0.05) 1px, transparent 1px, transparent 2px),
-        radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.4) 100%);
+      background: repeating-linear-gradient(0deg, rgba(88, 166, 255, 0.03) 0px, rgba(88, 166, 255, 0.03) 1px, transparent 1px, transparent 2px);
       pointer-events: none;
-      z-index: 1; opacity: 0.6;
+      z-index: 1; opacity: 0.5;
     }
     #node-tooltip::before {
-      content: "SCANNING_NODE..."; 
-      position: absolute; top: 4px; right: 24px; 
-      font-size: 8px; color: var(--color-primary); 
-      opacity: 0.4; letter-spacing: 0.2em;
-    }
-    .tooltip-scanline {
-      position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+      content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 1px;
       background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
-      animation: scanline 4s linear infinite;
-      z-index: 2; opacity: 0.5;
+      animation: scanline 3s linear infinite;
+      z-index: 2;
     }
     @keyframes scanline { 0% { top: 0; } 100% { top: 100%; } }
     .tooltip-header {
       display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 1px solid rgba(88, 166, 255, 0.3);
-      padding-bottom: 12px; margin-bottom: 16px;
+      border-bottom: 1px solid rgba(88, 166, 255, 0.2);
+      padding-bottom: 10px; margin-bottom: 12px;
       position: relative; z-index: 2;
     }
-    .tooltip-title { 
-      color: var(--color-primary); font-family: var(--font-title); 
-      font-size: 11px; letter-spacing: 0.3em; font-weight: 700;
-      text-shadow: 0 0 10px var(--color-primary-glow);
-    }
+    .tooltip-title { color: var(--color-primary); font-family: var(--font-title); font-size: 10px; letter-spacing: 0.2em; font-weight: 700; }
     .tooltip-body { position: relative; z-index: 2; }
-    .tooltip-row { 
-      display: flex; justify-content: space-between; 
-      margin-top: 10px; border-bottom: 1px solid rgba(255,255,255,0.03); 
-      padding-bottom: 6px; align-items: baseline;
-    }
-    .tooltip-label { color: var(--color-text-muted); text-transform: uppercase; font-size: 9px; letter-spacing: 0.15em; width: 90px; flex-shrink: 0; }
-    .tooltip-val { 
-      color: var(--color-text); font-weight: 600; font-size: 11px; 
-      flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; 
-      white-space: nowrap; font-family: var(--font-mono);
-    }
+    .tooltip-row { display: flex; justify-content: space-between; margin-top: 8px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 4px; }
+    .tooltip-label { color: var(--color-text-muted); text-transform: uppercase; font-size: 9px; letter-spacing: 0.1em; width: 80px; }
+    .tooltip-val { color: var(--color-text); font-weight: 600; font-size: 11px; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tooltip-val.live { color: var(--color-primary); text-shadow: 0 0 10px var(--color-primary-glow); }
     .tooltip-val.id { color: var(--color-accent); font-size: 10px; }
     .tooltip-val.lat { color: var(--color-warn); }
-    .hud-bars { display: flex; gap: 4px; margin-top: 16px; }
-    .hud-bar { height: 6px; flex: 1; background: rgba(88, 166, 255, 0.1); border-radius: 1px; overflow: hidden; position: relative; }
-    .hud-bar-inner { 
-      height: 100%; width: 0%; 
-      background: linear-gradient(90deg, var(--color-primary), #fff); 
-      box-shadow: 0 0 15px var(--color-primary-glow); 
-      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
-    }
-    .throughput-container {
-      margin-top: 16px; display: flex; flex-direction: column; gap: 6px;
-      padding: 12px; background: rgba(255,255,255,0.02); border-radius: 4px;
-    }
-    .mini-graph {
-      display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-top: 4px;
-    }
-    .graph-bar { width: 4px; background: var(--color-primary); opacity: 0.3; border-radius: 1px 1px 0 0; }
-    #tt-progress-container {
-      margin-top: 16px; height: 3px; background: rgba(88,166,255,0.1); 
-      position: relative; overflow: hidden; border-radius: 2px;
-    }
-    #tt-progress { 
-      position: absolute; left: 0; top: 0; height: 100%; width: 30%; 
-      background: var(--color-primary); box-shadow: 0 0 15px var(--color-primary);
-      animation: progress_move 2s infinite linear;
-    }
-    @keyframes progress_move {
-      0% { left: -30%; }
-      100% { left: 100%; }
-    }
+    .hud-bars { display: flex; gap: 2px; margin-top: 12px; }
+    .hud-bar { height: 4px; flex: 1; background: rgba(88, 166, 255, 0.1); border-radius: 1px; overflow: hidden; }
+    .hud-bar-inner { height: 100%; width: 0%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary-glow); transition: width 0.3s ease; }
 
   </style>
 
-  <script type="module" crossorigin src="/assets/index-DdUDPHc3.js"></script>
+  <script type="module" crossorigin src="/assets/index-BDU2S81o.js"></script>
 </head>
 <body>
 
@@ -359,97 +312,34 @@
 <div id="legacy-tooltip"></div>
 <div id="node-tooltip">
   <div class="glitch-overlay"></div>
-  <div class="tooltip-scanline"></div>
   <div class="tooltip-header">
-    <span class="tooltip-title">NETWORK_ENTITY_INTEL</span>
+    <span class="tooltip-title">PEER_NODE_DATA</span>
     <span class="dot live"></span>
   </div>
   <div class="tooltip-body">
-    <div class="tooltip-row">
-      <span class="tooltip-label">PEER_HASH:</span> 
-      <span id="tt-id" class="tooltip-val id">Qm...</span>
-    </div>
-    <div class="tooltip-row">
-      <span class="tooltip-label">LATENCY:</span> 
-      <span id="tt-lat" class="tooltip-val lat">0ms</span>
-    </div>
-    <div class="tooltip-row">
-      <span class="tooltip-label">PROTOCOL:</span> 
-      <span id="tt-protocol" class="tooltip-val">QUIC_V1</span>
-    </div>
-    <div class="tooltip-row">
-      <span class="tooltip-label">STABILITY:</span> 
-      <span id="tt-stability" class="tooltip-val" style="color: var(--color-accent)">99.9%</span>
-    </div>
-    <div class="tooltip-row">
-      <span class="tooltip-label">GATEWAY:</span> 
-      <span id="tt-path" class="tooltip-val">direct-p2p</span>
-    </div>
-    <div class="tooltip-row">
-      <span class="tooltip-label">LOCATION:</span> 
-      <span id="tt-loc" class="tooltip-val">UNKNOWN_RELAY</span>
-    </div>
-    <div class="tooltip-row" style="border-bottom: none; margin-top: 15px;">
-      <span class="tooltip-label">ROUTE_MAP:</span> 
-      <div id="tt-route" style="flex: 1; font-size: 8px; color: var(--color-primary); display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;"></div>
-    </div>
+    <div class="tooltip-row"><span class="tooltip-label">NODE_ID:</span> <span id="tt-id" class="tooltip-val id">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">LATENCY:</span> <span id="tt-lat" class="tooltip-val lat">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">PROTOCOL:</span> <span id="tt-protocol" class="tooltip-val">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">STABILITY:</span> <span id="tt-stability" class="tooltip-val" style="color: var(--color-accent)">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">ROUTING:</span> <span id="tt-path" class="tooltip-val">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">GEOLOC:</span> <span id="tt-loc" class="tooltip-val">...</span></div>
+    <div class="tooltip-row"><span class="tooltip-label">STATUS:</span> <span id="tt-status" class="tooltip-val live">...</span></div>
     
-    <div class="throughput-container">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-        <span class="tooltip-label" style="width: auto;">DATA_FLUX:</span>
-        <span id="tt-traffic" class="tooltip-val live" style="font-size: 12px;">0.00 KB/s</span>
-      </div>
-      <div class="mini-graph" id="tt-graph">
-        <!-- Bars will be added by JS -->
-      </div>
-    </div>
-
     <div class="hud-bars">
-      <div class="hud-bar"><div class="hud-bar-inner" id="tt-bar-1"></div></div>
-      <div class="hud-bar"><div class="hud-bar-inner" id="tt-bar-2"></div></div>
-      <div class="hud-bar"><div class="hud-bar-inner" id="tt-bar-3"></div></div>
-      <div class="hud-bar"><div class="hud-bar-inner" id="tt-bar-4"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" style="width: 70%"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" style="width: 40%"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" style="width: 90%"></div></div>
+      <div class="hud-bar"><div class="hud-bar-inner" style="width: 20%"></div></div>
     </div>
 
-    <div style="margin-top: 16px;">
-      <div style="display: flex; justify-content: space-between; font-size: 8px; color: var(--color-text-muted); margin-bottom: 4px;">
-        <span>INGRESS_SIGNAL</span>
-        <span id="tt-rx-val">0%</span>
-      </div>
-      <div style="height: 3px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden; border-radius: 1px;">
-        <div id="tt-rx-bar" style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: var(--color-accent); box-shadow: 0 0 10px var(--color-accent);"></div>
-      </div>
-      
-      <div style="display: flex; justify-content: space-between; font-size: 8px; color: var(--color-text-muted); margin-top: 8px; margin-bottom: 4px;">
-        <span>EGRESS_SIGNAL</span>
-        <span id="tt-tx-val">0%</span>
-      </div>
-      <div style="height: 3px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden; border-radius: 1px;">
-        <div id="tt-tx-bar" style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary);"></div>
-      </div>
-    </div>
-
-    <div id="tt-progress-container">
-      <div id="tt-progress"></div>
-    </div>
-    
-    <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
-      <span id="tt-status" class="tooltip-val live" style="font-size: 9px; text-align: left; letter-spacing: 0.1em;">ACTIVE_STREAM</span>
-      <span style="font-size: 8px; opacity: 0.3;">SIG_TYPE: QUANTUM</span>
+    <div style="margin-top: 12px; height: 2px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden;">
+      <div id="tt-progress" style="position: absolute; left: 0; top: 0; height: 100%; width: 30%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary);"></div>
     </div>
   </div>
 </div>
 
-<div id="targeting-reticle" style="position: fixed; pointer-events: none; opacity: 0; z-index: 50; width: 60px; height: 60px; border: 1px solid var(--color-primary); border-radius: 50%; transform: translate(-50%, -50%); transition: opacity 0.3s ease;">
-  <div style="position: absolute; top: -5px; left: 50%; width: 1px; height: 10px; background: var(--color-primary); transform: translateX(-50%);"></div>
-  <div style="position: absolute; bottom: -5px; left: 50%; width: 1px; height: 10px; background: var(--color-primary); transform: translateX(-50%);"></div>
-  <div style="position: absolute; left: -5px; top: 50%; width: 10px; height: 1px; background: var(--color-primary); transform: translateY(-50%);"></div>
-  <div style="position: absolute; right: -5px; top: 50%; width: 10px; height: 1px; background: var(--color-primary); transform: translateY(-50%);"></div>
-  <div style="position: absolute; inset: 5px; border: 1px dashed var(--color-primary); border-radius: 50%; opacity: 0.3; animation: rotate 4s linear infinite;"></div>
-</div>
 
 <style>
-  @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   @keyframes progress_sim {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(200%); }

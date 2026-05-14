@@ -100,21 +100,45 @@ def deploy():
 
         # Cleanup old pins with the same name
         try:
+            print("Cleaning up old pins...")
             list_url = "https://api.pinata.cloud/data/pinList"
-            # Search for pins with the same name but different CID
-            params = {
-                'metadata[name]': 'ipfs-universe',
-                'status': 'pinned'
+            headers_list = {
+                'Authorization': f'Bearer {jwt}',
+                'Content-Type': 'application/json'
             }
-            list_res = requests.get(list_url, headers=headers, params=params)
-            if list_res.status_code == 200:
-                old_pins = list_res.json().get('rows', [])
-                for pin in old_pins:
+            
+            # Use pagination to find all old pins if necessary
+            page_limit = 100
+            offset = 0
+            while True:
+                params = {
+                    'metadata[name]': 'ipfs-universe',
+                    'status': 'pinned',
+                    'pageLimit': page_limit,
+                    'pageOffset': offset
+                }
+                list_res = requests.get(list_url, headers=headers_list, params=params)
+                if list_res.status_code != 200:
+                    print(f"Cleanup error fetching list: {list_res.text}")
+                    break
+                
+                rows = list_res.json().get('rows', [])
+                if not rows:
+                    break
+                
+                for pin in rows:
                     old_cid = pin.get('ipfs_pin_hash')
                     if old_cid and old_cid != cid:
-                        print(f"Unpinning old version: {old_cid}")
+                        print(f"Unpinning old version: {old_cid} ({pin.get('date_pinned')})")
                         unpin_url = f"https://api.pinata.cloud/pinning/unpin/{old_cid}"
-                        requests.delete(unpin_url, headers=headers)
+                        unpin_res = requests.delete(unpin_url, headers=headers_list)
+                        if unpin_res.status_code != 200:
+                            print(f"Failed to unpin {old_cid}: {unpin_res.text}")
+                
+                if len(rows) < page_limit:
+                    break
+                offset += page_limit
+            print("Cleanup complete.")
         except Exception as cleanup_error:
             print(f"Cleanup warning: {cleanup_error}")
 

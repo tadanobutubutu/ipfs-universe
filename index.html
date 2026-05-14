@@ -303,23 +303,6 @@
     </div>
   </div>
 
-  <div class="panel" id="panel-notion">
-    <div class="panel-title">// notion_hub</div>
-    <div class="stat-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
-      <div style="display: flex; width: 100%; gap: 8px;">
-        <input type="text" id="notion-search-input" placeholder="Search pages..." style="flex: 1; background: rgba(0,0,0,0.2); border: 1px solid var(--color-border); border-radius: 4px; padding: 4px 8px; color: var(--color-text); font-family: var(--font-mono); font-size: 11px;">
-        <button class="btn primary" style="padding: 4px 10px;" onclick="notionAction('search')">Search</button>
-      </div>
-      <div style="display: flex; width: 100%; gap: 8px; margin-top: 4px;">
-        <button class="btn" style="flex: 1; padding: 6px;" onclick="notionAction('create')">+ New Page</button>
-        <button class="btn" style="flex: 1; padding: 6px;" onclick="notionAction('comment')">Comment</button>
-      </div>
-    </div>
-    <div id="notion-status" style="margin-top: 12px; font-size: 10px; color: var(--color-text-muted); border-top: 1px solid var(--color-border); padding-top: 8px;">
-      READY_FOR_ADAPTIVE_COLLABORATION
-    </div>
-  </div>
-
   <div id="log">
     <span id="log-label">LOG &gt;</span>
     <div id="log-entries"></div>
