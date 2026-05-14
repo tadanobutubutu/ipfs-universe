@@ -97,8 +97,29 @@ def deploy():
             sys.exit(1)
 
         print(f"Successfully uploaded. CID: {cid}")
-        
+
+        # Cleanup old pins with the same name
+        try:
+            list_url = "https://api.pinata.cloud/data/pinList"
+            # Search for pins with the same name but different CID
+            params = {
+                'metadata[name]': 'ipfs-universe',
+                'status': 'pinned'
+            }
+            list_res = requests.get(list_url, headers=headers, params=params)
+            if list_res.status_code == 200:
+                old_pins = list_res.json().get('rows', [])
+                for pin in old_pins:
+                    old_cid = pin.get('ipfs_pin_hash')
+                    if old_cid and old_cid != cid:
+                        print(f"Unpinning old version: {old_cid}")
+                        unpin_url = f"https://api.pinata.cloud/pinning/unpin/{old_cid}"
+                        requests.delete(unpin_url, headers=headers)
+        except Exception as cleanup_error:
+            print(f"Cleanup warning: {cleanup_error}")
+
         if deployment_id:
+
             update_github_deployment_status(deployment_id, 'success', 'https://ipfsuniverse.xyz/')
 
         # Output for GitHub Actions
