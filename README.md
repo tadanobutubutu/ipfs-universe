@@ -1,5 +1,9 @@
 # 🌌 IPFS Universe 2.0
 
+
+<!-- AUTO-PACKAGE-BADGES:START -->
+
+<!-- AUTO-PACKAGE-BADGES:END -->
 ![IPFS Universe Hero](./public/hero.png)
 
 > **A premium, real-time 3D visualization of the IPFS network.**
