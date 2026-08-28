@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KuboProbeError, probeLocalKubo } from '../src/network/kubo-observer';
+import { probeLocalKubo } from '../src/network/kubo-observer';
 
 describe('probeLocalKubo', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -32,6 +32,6 @@ describe('probeLocalKubo', () => {
 
   it('turns browser fetch failures into an actionable CORS error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
-    await expect(probeLocalKubo()).rejects.toMatchObject<KuboProbeError>({ code: 'cors' });
+    await expect(probeLocalKubo()).rejects.toMatchObject({ code: 'cors' });
   });
 });
