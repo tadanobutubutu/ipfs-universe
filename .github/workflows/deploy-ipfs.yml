@@ -1,4 +1,4 @@
-name: Verify and deploy the Web universe
+name: Verify and deploy Peerstellation
 
 on:
   push:
