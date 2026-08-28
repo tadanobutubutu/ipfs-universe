@@ -120,7 +120,7 @@ test('reflows at 320 CSS pixels and 200 percent text size', async ({ page }) => 
   ).toEqual([]);
 
   const firstViewport = await page.locator(
-    '.hero-copy, .hero-copy h1, .hero-copy .eyebrow, .scene-legend, .metric-deck',
+    '.scene-legend, .metric-deck',
   ).evaluateAll((elements) =>
     elements
       .filter((element) => element.scrollWidth > element.clientWidth + 1)

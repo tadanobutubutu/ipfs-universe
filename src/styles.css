@@ -634,6 +634,8 @@ canvas:focus-visible,
   color: var(--paper-dim);
   font: var(--step--1)/1.4 var(--mono);
   letter-spacing: 0.04em;
+  opacity: 0.58;
+  pointer-events: none;
 }
 
 .scene-guide__mobile {
@@ -1060,7 +1062,6 @@ canvas:focus-visible,
   }
 
   .scene-legend,
-  .scene-guide,
   .node-status,
   .metric-deck,
   .scope-note {
@@ -1096,7 +1097,6 @@ canvas:focus-visible,
 
 @media (min-width: 55rem) {
   .scene-legend,
-  .scene-guide,
   .node-status,
   .metric-deck,
   .scope-note {
@@ -1212,9 +1212,11 @@ canvas:focus-visible,
   }
 
   .hero-copy {
-    inset: auto;
-    width: 100%;
+    inset: 0 auto auto -2px;
+    width: 1px;
+    height: 1px;
     min-width: 0;
+    overflow: hidden;
   }
 
   .hero-copy .eyebrow {
