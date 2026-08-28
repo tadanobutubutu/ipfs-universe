@@ -1,5 +1,6 @@
 import type {
   Connection,
+  IdentifyResult,
   Libp2p,
   PeerInfo,
   PeerId,
@@ -49,6 +50,7 @@ export interface HeliaNetworkAdapter {
     event: AdapterEvent,
     listener: (remotePeer: ObservablePeer) => void,
   ): () => void;
+  onIdentify?(listener: (remotePeer: ObservablePeer, details: PeerDetails) => void): () => void;
   ping(remotePeer: ObservablePeer, signal: AbortSignal): Promise<number>;
   getPeerDetails?(remotePeer: ObservablePeer): Promise<PeerDetails | undefined>;
   stop(): Promise<void>;
@@ -195,6 +197,18 @@ class BrowserHeliaObserver implements HeliaObserver {
         });
       }),
     ];
+    if (adapter.onIdentify !== undefined) {
+      this.#unsubscribers.push(
+        adapter.onIdentify((remotePeer, details) => {
+          this.#emit({
+            type: 'identified',
+            peerId: remotePeer.toString(),
+            observedAt: this.#now(),
+            ...details,
+          });
+        }),
+      );
+    }
 
     this.#observeConnections(adapter.getConnections());
   }
@@ -417,6 +431,7 @@ async function createDefaultHeliaAdapter(): Promise<HeliaNetworkAdapter> {
         .getConnections(remotePeer as PeerId | undefined)
         .map(mapConnection),
     on: (event, listener) => subscribeToLibp2p(libp2p, event, listener),
+    onIdentify: (listener) => subscribeToIdentify(libp2p, listener),
     ping: (remotePeer, signal) =>
       libp2p.services.ping.ping(remotePeer as PeerId, { signal }),
     getPeerDetails: async (remotePeer) => {
@@ -459,6 +474,30 @@ function subscribeToLibp2p<M extends ServiceMap>(
   const handler = ({ detail }: CustomEvent<PeerId>): void => listener(detail);
   libp2p.addEventListener('peer:disconnect', handler);
   return () => libp2p.removeEventListener('peer:disconnect', handler);
+}
+
+function subscribeToIdentify(
+  libp2p: Libp2p<ServiceMap>,
+  listener: (remotePeer: ObservablePeer, details: PeerDetails) => void,
+): () => void {
+  const handler = (event: CustomEvent<IdentifyResult>): void => {
+    const result = event.detail;
+    listener(result.peerId, {
+      protocols: result.protocols
+        .filter((value): value is string => typeof value === 'string')
+        .slice(0, 32)
+        .map((value) => value.slice(0, 128)),
+      agentVersion: boundedIdentifyString(result.agentVersion),
+      protocolVersion: boundedIdentifyString(result.protocolVersion),
+      addressCount: Math.min(result.listenAddrs.length, 128),
+    });
+  };
+  libp2p.addEventListener('peer:identify', handler);
+  return () => libp2p.removeEventListener('peer:identify', handler);
+}
+
+function boundedIdentifyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.slice(0, 256) : undefined;
 }
 
 function mapConnection(connection: Connection): ObservableConnection {

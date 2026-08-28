@@ -160,10 +160,23 @@ export class AppShell {
   }
 
   #placeTooltip(anchorX: number, anchorY: number): void {
-    const width = this.#nodeTooltip.offsetWidth;
-    const height = this.#nodeTooltip.offsetHeight;
-    const gap = 12;
-    const left = Math.min(Math.max(8, anchorX + gap), Math.max(8, window.innerWidth - width - 8));
+    // The first call can happen in the same task that removes `hidden`, before
+    // layout has produced an offset box. Use the computed width as a safe
+    // fallback so a narrow viewport never receives an unclamped card.
+    const computed = getComputedStyle(this.#nodeTooltip);
+    const width = this.#nodeTooltip.offsetWidth || Number.parseFloat(computed.width) || Math.min(320, window.innerWidth - 16);
+    const height = this.#nodeTooltip.offsetHeight || Number.parseFloat(computed.height) || 220;
+    const gap = 14;
+    const rightCandidate = anchorX + gap;
+    const leftCandidate = anchorX - gap - width;
+    const maxLeft = Math.max(8, window.innerWidth - width - 8);
+    // Prefer the node's right side, but flip to the left before clamping so
+    // the card remains fully readable on narrow screens.
+    const left = rightCandidate + width <= window.innerWidth - 8
+      ? rightCandidate
+      : leftCandidate >= 8
+        ? leftCandidate
+        : Math.min(Math.max(8, rightCandidate), maxLeft);
     const top = Math.min(Math.max(height / 2 + 8, anchorY), Math.max(height / 2 + 8, window.innerHeight - height / 2 - 8));
     this.#nodeTooltip.style.left = `${left}px`;
     this.#nodeTooltip.style.top = `${top}px`;

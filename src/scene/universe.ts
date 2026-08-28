@@ -81,6 +81,7 @@ class ThreeUniverseScene implements UniverseScene {
   readonly #interactionListeners = new Set<(interaction: NodeInteraction) => void>();
   #hoveredIndex?: number;
   #selectedIndex?: number;
+  #keyboardIndex?: number;
   #pointerDownX = 0;
   #pointerDownY = 0;
 
@@ -199,6 +200,15 @@ class ThreeUniverseScene implements UniverseScene {
     this.#connectedPeerIds = connectedPeerIds;
 
     this.#peers = visible;
+    if (this.#selectedIndex !== undefined && this.#selectedIndex >= visible.length) {
+      this.#selectedIndex = undefined;
+    }
+    if (this.#hoveredIndex !== undefined && this.#hoveredIndex >= visible.length) {
+      this.#hoveredIndex = undefined;
+    }
+    if (this.#keyboardIndex !== undefined && this.#keyboardIndex >= visible.length) {
+      this.#keyboardIndex = undefined;
+    }
     this.#peerSignature = signature;
     this.#peerMesh.count = visible.length;
     visible.forEach((peer, index) => {
@@ -309,11 +319,14 @@ class ThreeUniverseScene implements UniverseScene {
       return;
     }
     if (!this.#motionPaused) {
-      this.#targetYaw += delta * 0.035;
+      const interactionActive = this.#hoveredIndex !== undefined || this.#selectedIndex !== undefined;
+      if (!interactionActive) {
+        this.#targetYaw += delta * 0.035;
+        this.#physics?.step(delta, this.#peers.length, 1);
+      }
       this.#core.rotation.y += delta * 0.09;
       this.#core.rotation.x += delta * 0.025;
       this.#dust.rotation.y -= delta * 0.004;
-      this.#physics?.step(delta, this.#peers.length, 1);
     }
     this.#updatePulse(frameTime);
     this.#updateCamera(this.#motionPaused);
@@ -421,6 +434,7 @@ class ThreeUniverseScene implements UniverseScene {
       const offset = index * 3;
       this.#pickWorld.set(positions[offset] ?? 0, positions[offset + 1] ?? 0, positions[offset + 2] ?? 0);
       this.#pickScreen.copy(this.#pickWorld).project(this.#camera);
+      if (this.#pickScreen.z < -1 || this.#pickScreen.z > 1) continue;
       const x = (this.#pickScreen.x + 1) * rect.width * 0.5;
       const y = (1 - this.#pickScreen.y) * rect.height * 0.5;
       const distance = Math.hypot(targetX - x, targetY - y);
@@ -438,7 +452,7 @@ class ThreeUniverseScene implements UniverseScene {
       delete this.#canvas.dataset.selectedPeer;
       this.#canvas.setAttribute('aria-label', 'Live 3D IPFS peer universe');
       for (const listener of this.#interactionListeners) listener({ mode: 'clear', pinned: false });
-      this.#updatePeerGeometry();
+      if (this.#motionPaused) this.#updatePeerGeometry();
       return;
     }
     if (index === undefined) return;
@@ -451,7 +465,7 @@ class ThreeUniverseScene implements UniverseScene {
     this.#canvas.dataset.selectedPeer = peer.peerId;
     this.#canvas.setAttribute('aria-label', `${peer.peerId}, ${peer.status} peer. Press Escape to dismiss details.`);
     for (const listener of this.#interactionListeners) listener({ peer, x, y, mode, pinned });
-    this.#updatePeerGeometry();
+    if (this.#motionPaused) this.#updatePeerGeometry();
     if (this.#motionPaused) this.#renderScene();
   }
 
@@ -553,6 +567,7 @@ class ThreeUniverseScene implements UniverseScene {
       const hit = this.#peerAt(event.clientX, event.clientY);
       if (hit !== this.#hoveredIndex) {
         this.#hoveredIndex = hit;
+        this.#keyboardIndex = hit;
         if (this.#selectedIndex === undefined) this.#emitInteraction('hover', hit, false);
       } else if (hit !== undefined && this.#selectedIndex === undefined) {
         this.#emitInteraction('hover', hit, false);
@@ -585,9 +600,13 @@ class ThreeUniverseScene implements UniverseScene {
         const hit = this.#peerAt(event.clientX, event.clientY);
         if (hit === undefined) {
           this.#selectedIndex = undefined;
+          this.#keyboardIndex = undefined;
+          this.#hoveredIndex = undefined;
           this.#emitInteraction('clear', undefined, false);
         } else {
           this.#selectedIndex = hit;
+          this.#keyboardIndex = hit;
+          this.#hoveredIndex = hit;
           this.#emitInteraction('select', hit, true);
         }
       }
@@ -637,14 +656,23 @@ class ThreeUniverseScene implements UniverseScene {
         this.#targetPitch = 0.08;
         this.#targetDistance = 54;
         break;
+      case '[':
+        this.#selectRelative(-1);
+        event.preventDefault();
+        return;
+      case ']':
+        this.#selectRelative(1);
+        event.preventDefault();
+        return;
       case 'Enter':
-        if (this.#hoveredIndex !== undefined) {
-          this.#selectedIndex = this.#hoveredIndex;
-          this.#emitInteraction('select', this.#selectedIndex, true);
-        }
+      case ' ':
+        this.#toggleKeyboardSelection();
+        event.preventDefault();
         return;
       case 'Escape':
         this.#selectedIndex = undefined;
+        this.#keyboardIndex = undefined;
+        this.#hoveredIndex = undefined;
         this.#emitInteraction('clear', undefined, false);
         return;
       default:
@@ -655,6 +683,34 @@ class ThreeUniverseScene implements UniverseScene {
       this.#renderStaticFrame();
     }
   };
+
+  #selectRelative(delta: -1 | 1): void {
+    if (this.#peers.length === 0) return;
+    const current = this.#selectedIndex ?? this.#keyboardIndex ?? this.#hoveredIndex;
+    const start = current ?? (delta > 0 ? -1 : 0);
+    const next = (start + delta + this.#peers.length) % this.#peers.length;
+    this.#keyboardIndex = next;
+    this.#hoveredIndex = next;
+    if (this.#selectedIndex === undefined) {
+      this.#emitInteraction('hover', next, false);
+    } else {
+      this.#selectedIndex = next;
+      this.#emitInteraction('select', next, true);
+    }
+  }
+
+  #toggleKeyboardSelection(): void {
+    const index = this.#selectedIndex ?? this.#keyboardIndex ?? this.#hoveredIndex;
+    if (index === undefined) return;
+    if (this.#selectedIndex === index) {
+      this.#selectedIndex = undefined;
+      this.#emitInteraction('hover', index, false);
+      return;
+    }
+    this.#selectedIndex = index;
+    this.#hoveredIndex = index;
+    this.#emitInteraction('select', index, true);
+  }
 
   readonly #onVisibilityChange = (): void => {
     if (document.hidden) {
@@ -855,7 +911,10 @@ function radialDistance(peer: PeerRecord): number {
   if (peer.latencyMs === undefined) {
     return 18 + seed * 14;
   }
-  return 8 + (THREE.MathUtils.clamp(peer.latencyMs, 0, 800) / 800) * 14 + seed * 3;
+  const latency = THREE.MathUtils.clamp(peer.latencyMs, 10, 1_000);
+  const normalized = (Math.log(latency) - Math.log(10)) / (Math.log(1_000) - Math.log(10));
+  const base = 10 + THREE.MathUtils.clamp(normalized, 0, 1) * 34;
+  return base * (0.8 + seed * 0.4);
 }
 
 function edgeBrightness(latencyMs: number | undefined): number {

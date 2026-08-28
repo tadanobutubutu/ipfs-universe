@@ -421,12 +421,17 @@ canvas:focus-visible,
   box-shadow: 0 1rem 3rem rgb(0 0 0 / 48%), 0 0 2rem rgb(115 251 211 / 12%);
   backdrop-filter: blur(1.1rem);
   pointer-events: none;
-  translate: 0.9rem -50%;
+  translate: 0 -50%;
   transform-origin: left center;
 }
 
 .node-tooltip[hidden] {
   display: none;
+}
+
+.node-tooltip[data-pinned="true"] {
+  pointer-events: auto;
+  user-select: text;
 }
 
 .node-tooltip__heading {
@@ -1208,7 +1213,7 @@ canvas:focus-visible,
 
   .node-tooltip {
     width: min(17rem, calc(100vw - 1rem));
-    translate: 0.6rem -50%;
+    translate: 0 -50%;
   }
 
   .hero-copy {
