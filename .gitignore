@@ -3,6 +3,9 @@ node_modules/
 
 # Build output
 dist/
+public/*.wasm
+wasm/target/
+.wrangler/
 
 # IDE
 .vscode/
@@ -20,3 +23,4 @@ notion_*.json
 notion_*.txt
 remote_*.ts
 real_screenshot.png
+test-results/

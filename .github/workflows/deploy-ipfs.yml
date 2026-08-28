@@ -1,49 +1,102 @@
-name: Deploy to IPFS via Pinata
+name: Verify and deploy the Web universe
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  deploy:
+  quality:
+    name: Type, unit, browser, and build gates
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@v1
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
-          version: 0.13.0
+          version: 0.15.2
+
+      - name: Enable the Rust WebAssembly target
+        run: rustup target add wasm32-unknown-unknown
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
+      - name: Verify types, units, WASM, and production build
+        run: npm run check
+
+      - name: Install the Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify real-browser behavior and accessibility
+        run: npm run test:e2e
+
+  deploy:
+    name: Publish primary and immutable releases
+    if: github.event_name != 'pull_request'
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: peerstellation-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://ipfsuniverse.xyz/
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: 0.15.2
+
+      - name: Enable the Rust WebAssembly target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build immutable assets
         run: npm run build
 
-      - name: Pinata Deploy
-        id: deploy
+      - name: Deploy the primary Cloudflare release
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+        run: npm run deploy:cloudflare
+
+      - name: Pin the same release to public IPFS
+        id: pinata
         env:
           PINATA_JWT: ${{ secrets.PINATA_JWT }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/deploy.py
+        run: npm run deploy:pinata
 
-      - name: Update Cloudflare DNS
+      - name: Point DNSLink at the immutable release
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CID: ${{ steps.pinata.outputs.cid }}
+          CLOUDFLARE_DNS_API_TOKEN: ${{ secrets.CLOUDFLARE_DNS_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CID: ${{ steps.deploy.outputs.cid }}
-        run: ./scripts/update-dns.sh
+        run: npm run deploy:dnslink

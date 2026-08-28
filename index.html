@@ -1,352 +1,255 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="dark">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IPFS Universe</title>
-  <meta name="description" content="A real-time 3D visualization of the IPFS network powered by Three.js and public IPFS gateways." />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600&family=Orbitron:wght@400;700&display=swap');
-    :root {
-      --color-bg: #04060b;
-      --color-surface: rgba(13, 17, 23, 0.7);
-      --color-border: rgba(88, 166, 255, 0.2);
-      --color-text: #f0f6fc;
-      --color-text-muted: #8b949e;
-      --color-primary: #58a6ff;
-      --color-primary-glow: rgba(88, 166, 255, 0.5);
-      --color-accent: #3fb950;
-      --color-warn: #f0883e;
-      --color-error: #f85149;
-      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
-      --font-body: 'Inter', system-ui, sans-serif;
-      --font-title: 'Orbitron', sans-serif;
-      --radius: 8px;
-      --transition: 400ms cubic-bezier(0.23, 1, 0.32, 1);
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { 
-      width: 100%; height: 100%; 
-      background: var(--color-bg); 
-      color: var(--color-text); 
-      font-family: var(--font-body); 
-      overflow: hidden; 
-    }
-    #canvas-container { position: fixed; inset: 0; z-index: 0; }
-    canvas { display: block; width: 100% !important; height: 100% !important; }
-    
-    #hud {
-      position: fixed; inset: 0; z-index: 10; pointer-events: none;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      grid-template-columns: 340px 1fr 340px;
-      gap: 24px; padding: 32px;
-      perspective: 2000px;
-    }
-    
-    .glass {
-      background: var(--color-surface);
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      border: 1px solid var(--color-border);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
-      border-radius: var(--radius);
-      position: relative;
-      overflow: hidden;
-    }
-    .glass::after {
-      content: ""; position: absolute; inset: 0;
-      background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 100%);
-      pointer-events: none;
-    }
+<!doctype html>
+<html lang="en" data-motion="running" data-scene="pending">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#050508" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="A live 3D observatory for the IPFS peers this browser can actually discover and connect to."
+    />
+    <link rel="canonical" href="https://ipfsuniverse.xyz/" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Peerstellation" />
+    <meta property="og:title" content="Peerstellation — Live Peer Observatory" />
+    <meta
+      property="og:description"
+      content="Enter a real-time 3D view of the IPFS neighborhood this browser can actually observe."
+    />
+    <meta property="og:url" content="https://ipfsuniverse.xyz/" />
+    <meta property="og:image" content="https://ipfsuniverse.xyz/hero.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Peerstellation — Live Peer Observatory" />
+    <meta
+      name="twitter:description"
+      content="A real-time 3D view of this browser’s observable IPFS neighborhood."
+    />
+    <meta name="twitter:image" content="https://ipfsuniverse.xyz/hero.png" />
+    <title>Peerstellation — Live Peer Observatory</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#universe-main">Skip to the observatory</a>
 
-    #header {
-      grid-column: 1 / -1; pointer-events: all;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 32px;
-      background: var(--color-surface);
-      backdrop-filter: blur(30px) saturate(200%);
-      -webkit-backdrop-filter: blur(30px) saturate(200%);
-      border: 1px solid var(--color-border);
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-      border-radius: var(--radius);
-      border-bottom: 2px solid var(--color-primary);
-    }
-    
-    .logo { 
-      display: flex; align-items: center; gap: 16px; 
-      font-family: var(--font-title); font-size: 20px; font-weight: 700; 
-      color: var(--color-primary);
-      text-transform: uppercase;
-      letter-spacing: 0.2em;
-      text-shadow: 0 0 15px var(--color-primary-glow);
-    }
-    
-    #renderer-badge {
-      font-family: var(--font-mono); font-size: 10px; padding: 4px 14px;
-      border-radius: 4px; background: rgba(88,166,255,0.15);
-      border: 1px solid var(--color-primary); color: var(--color-primary); 
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      box-shadow: 0 0 10px var(--color-primary-glow);
-    }
-    #renderer-badge.legacy { background: rgba(240,136,62,0.15); border-color: var(--color-warn); color: var(--color-warn); box-shadow: 0 0 10px rgba(240,136,62,0.3); }
+    <header class="topbar" aria-label="Site header">
+      <a class="brand" href="/" aria-label="Peerstellation home">
+        <svg class="brand__mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+          <circle cx="20" cy="20" r="4.2" />
+          <ellipse cx="20" cy="20" rx="16" ry="7.2" transform="rotate(-28 20 20)" />
+          <ellipse cx="20" cy="20" rx="16" ry="7.2" transform="rotate(32 20 20)" />
+          <circle cx="31.6" cy="12.3" r="2.1" />
+        </svg>
+        <span class="brand__name">PEER<strong>STELLATION</strong></span>
+      </a>
 
-    .panel {
-      pointer-events: all;
-      background: var(--color-surface);
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      border: 1px solid var(--color-border);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
-      border-radius: var(--radius);
-      padding: 24px; font-family: var(--font-mono); font-size: 13px;
-      transition: transform 0.2s ease-out, border-color 0.3s ease;
-      position: relative;
-    }
-    .panel:hover { border-color: var(--color-primary); }
-    
-    .panel-title { 
-      font-family: var(--font-title);
-      font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase; 
-      color: var(--color-primary); margin-bottom: 20px; 
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .panel-title::after {
-      content: "OP_0x" + Math.random().toString(16).slice(2,6); font-size: 8px; opacity: 0.4;
-    }
+      <div class="topbar__actions" role="group" aria-label="Observatory controls">
+        <span class="connection-chip">
+          <i class="connection-chip__dot" aria-hidden="true"></i>
+          <span id="header-network-state">Connecting</span>
+        </span>
+        <button
+          class="icon-button"
+          id="motion-toggle"
+          type="button"
+          aria-pressed="false"
+          aria-label="Pause motion"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path class="motion-icon-pause" d="M8 5v14M16 5v14" />
+            <path class="motion-icon-play" d="m9 5 10 7-10 7V5Z" />
+          </svg>
+          <span class="sr-only" id="motion-toggle-label">Pause motion</span>
+          <span class="control-label">Motion</span>
+        </button>
+        <button
+          class="peer-button"
+          id="peer-explorer-button"
+          type="button"
+          aria-haspopup="dialog"
+        >
+          <span class="peer-button__label peer-button__label--long">Open peer explorer</span>
+          <span class="peer-button__label peer-button__label--short">Peers</span>
+          <strong id="header-peer-count">0</strong>
+        </button>
+      </div>
+    </header>
 
-    #panel-left  { grid-column: 1; grid-row: 2; align-self: start; border-left: 3px solid var(--color-primary); }
-    #panel-right { grid-column: 3; grid-row: 2; align-self: start; border-right: 3px solid var(--color-primary); }
+    <main id="universe-main">
+      <section class="universe" aria-labelledby="universe-title">
+        <canvas
+          id="universe-canvas"
+          role="img"
+          tabindex="0"
+          aria-label="Live 3D IPFS peer universe"
+          aria-describedby="scene-description scene-controls"
+        >
+          Your browser cannot draw the 3D scene. The peer explorer remains available.
+        </canvas>
 
-    .stat-row { 
-      display: flex; justify-content: space-between; align-items: center; 
-      padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: var(--color-text-muted); 
-    }
-    .stat-row:last-child { border-bottom: none; }
-    .stat-val { font-weight: 600; color: var(--color-text); font-family: var(--font-mono); letter-spacing: 0.05em; }
-    .stat-val.live { color: var(--color-primary); text-shadow: 0 0 10px var(--color-primary-glow); }
-    
-    #log {
-      grid-column: 1 / -1; grid-row: 3; pointer-events: all;
-      background: var(--color-surface);
-      backdrop-filter: blur(24px) saturate(180%);
-      border: 1px solid var(--color-border);
-      border-top: 1px solid var(--color-primary);
-      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
-      border-radius: var(--radius);
-      padding: 16px 24px; font-family: var(--font-mono); font-size: 12px;
-      display: flex; gap: 24px; align-items: center; overflow: hidden;
-      min-height: 60px;
-    }
-    #log-label { color: var(--color-primary); flex-shrink: 0; letter-spacing: 0.2em; font-weight: 700; font-family: var(--font-title); font-size: 11px; }
-    #log-entries { display: flex; gap: 32px; overflow: hidden; flex: 1; align-items: center; }
-    .log-entry { white-space: nowrap; font-size: 11px; color: var(--color-text-muted); }
-    .log-entry.ok { color: var(--color-accent); }
-    .log-entry.error { color: var(--color-error); }
-    .log-entry.warn { color: var(--color-warn); }
+        <div class="aurora" aria-hidden="true"></div>
+        <div class="scene-vignette" aria-hidden="true"></div>
 
-    .btn {
-      font-family: var(--font-title); font-size: 11px; padding: 10px 24px;
-      border-radius: 4px; border: 1px solid var(--color-border);
-      background: rgba(255,255,255,0.05); color: var(--color-text);
-      cursor: pointer; transition: all var(--transition);
-      white-space: nowrap; letter-spacing: 0.1em;
-      text-transform: uppercase;
-      position: relative; overflow: hidden;
-    }
-    .btn::before {
-      content: ""; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-      transition: 0.5s;
-    }
-    .btn:hover::before { left: 100%; }
-    .btn:hover { background: rgba(255,255,255,0.1); border-color: var(--color-primary); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-    .btn.primary { background: rgba(88,166,255,0.15); border-color: var(--color-primary); color: var(--color-primary); }
-    .btn.primary:hover { background: rgba(88,166,255,0.25); box-shadow: 0 0 20px var(--color-primary-glow); }
+        <aside class="node-tooltip" id="node-tooltip" role="tooltip" hidden>
+          <div class="node-tooltip__heading">
+            <span class="signal-dot" aria-hidden="true"></span>
+            <strong id="node-tip-peer">Peer</strong>
+            <span class="node-tooltip__state" id="node-tip-state">Connected</span>
+          </div>
+          <dl>
+            <div><dt>Latency</dt><dd id="node-tip-latency">unmeasured</dd></div>
+            <div><dt>Transport</dt><dd id="node-tip-transport">not observed</dd></div>
+            <div><dt>Direction</dt><dd id="node-tip-direction">not observed</dd></div>
+            <div><dt>Protocols</dt><dd id="node-tip-protocols">not observed</dd></div>
+            <div><dt>Agent</dt><dd id="node-tip-agent">not observed</dd></div>
+            <div><dt>Protocol</dt><dd id="node-tip-protocol-version">not observed</dd></div>
+            <div><dt>Addresses</dt><dd id="node-tip-addresses">not observed</dd></div>
+            <div><dt>Source</dt><dd id="node-tip-source">browser Helia</dd></div>
+          </dl>
+          <span class="node-tooltip__hint">Tap / click to pin · Esc to dismiss</span>
+        </aside>
 
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-muted); margin-right: 10px; }
-    .dot.live { background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary); animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1; transform: scale(1);} 50%{opacity:0.4; transform: scale(0.8);} }
-    
-    #node-tooltip {
-      position: fixed; pointer-events: none; opacity: 0; z-index: 100;
-      background: rgba(4, 6, 11, 0.9);
-      backdrop-filter: blur(20px) saturate(180%);
-      -webkit-backdrop-filter: blur(20px) saturate(180%);
-      border: 1px solid var(--color-primary);
-      box-shadow: 0 0 30px rgba(88, 166, 255, 0.3), inset 0 0 15px rgba(88, 166, 255, 0.05);
-      border-radius: 2px;
-      padding: 20px; font-family: var(--font-mono); font-size: 11px;
-      color: var(--color-text);
-      transform: translate(-50%, -100%) scale(0.9);
-      transition: opacity 0.3s var(--transition), transform 0.3s var(--transition), border-color 0.3s ease;
-      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
-      min-width: 280px;
-      overflow: hidden;
-    }
-    
-    .glitch-overlay {
-      position: absolute; inset: 0;
-      background: repeating-linear-gradient(0deg, rgba(88, 166, 255, 0.03) 0px, rgba(88, 166, 255, 0.03) 1px, transparent 1px, transparent 2px);
-      pointer-events: none;
-      z-index: 1; opacity: 0.5;
-    }
+        <section
+          class="scene-fallback"
+          id="scene-fallback"
+          aria-labelledby="scene-fallback-title"
+          aria-hidden="true"
+          hidden
+        >
+          <span class="scene-fallback__orbit" aria-hidden="true"></span>
+          <p class="eyebrow">Text observatory online</p>
+          <h2 id="scene-fallback-title">3D view unavailable</h2>
+          <p>
+            This device could not create a secure WebGL context. Live Helia observations
+            remain available through the peer explorer.
+          </p>
+        </section>
 
-    #node-tooltip::before {
-      content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 1px;
-      background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
-      animation: scanline 3s linear infinite;
-      z-index: 2;
-    }
-    @keyframes scanline { 0% { top: 0; } 100% { top: 100%; } }
-    
-    .tooltip-header {
-      display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 1px solid rgba(88, 166, 255, 0.2);
-      padding-bottom: 10px; margin-bottom: 12px;
-      position: relative; z-index: 2;
-    }
-    .tooltip-title { color: var(--color-primary); font-family: var(--font-title); font-size: 10px; letter-spacing: 0.2em; font-weight: 700; }
-    .tooltip-body { position: relative; z-index: 2; }
-    
-    .tooltip-row { display: flex; justify-content: space-between; margin-top: 8px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 4px; }
-    .tooltip-label { color: var(--color-text-muted); text-transform: uppercase; font-size: 9px; letter-spacing: 0.1em; width: 80px; }
-    .tooltip-val { color: var(--color-text); font-weight: 600; font-size: 11px; flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tooltip-val.live { color: var(--color-primary); text-shadow: 0 0 10px var(--color-primary-glow); }
-    .tooltip-val.id { color: var(--color-accent); font-size: 10px; }
-    .tooltip-val.lat { color: var(--color-warn); }
+        <ul class="scene-legend" aria-label="3D scene legend">
+          <li><i class="legend-dot legend-dot--connected" aria-hidden="true"></i>Connected · line to center</li>
+          <li><i class="legend-dot legend-dot--discovered" aria-hidden="true"></i>Discovered only</li>
+          <li><i class="legend-dot legend-dot--dust" aria-hidden="true"></i>Decorative signal dust</li>
+          <li class="scene-legend__axis">Distance = measured latency · outer orbit = unmeasured</li>
+          <li class="scene-legend__axis scene-legend__detail">Angle sectors = WebSocket · WebRTC · WebTransport · Relay · Other</li>
+          <li class="scene-legend__axis scene-legend__detail">Connection line brightness = faster measured response</li>
+        </ul>
 
-    .hud-bars { display: flex; gap: 2px; margin-top: 12px; }
-    .hud-bar { height: 4px; flex: 1; background: rgba(88, 166, 255, 0.1); border-radius: 1px; overflow: hidden; }
-    .hud-bar-inner { height: 100%; width: 0%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary-glow); transition: width 0.3s ease; }
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="signal-dot" aria-hidden="true"></span>Live browser observatory</p>
+          <h1 id="universe-title">Live browser observatory</h1>
+          <p class="hero-copy__body">
+            This browser observes reachable peers, measures their responses, and renders
+            only evidence from this session. Nothing here is simulated.
+          </p>
+        </div>
 
-  </style>
+        <div class="node-status" role="group" aria-label="Browser node status">
+          <span class="node-status__beacon" data-tone="loading" aria-hidden="true"></span>
+          <span class="node-status__copy">
+            <span class="node-status__label">Browser node</span>
+            <strong id="network-status">Opening a browser node…</strong>
+            <code id="local-peer-id">Identity pending</code>
+          </span>
+          <button class="text-button" id="network-retry" type="button" hidden>Retry</button>
+        </div>
 
-</head>
-<body>
+        <p class="scene-guide" id="scene-controls">
+          <span class="scene-guide__desktop">Drag to orbit · Scroll or +/− to travel · Arrow keys rotate</span>
+          <span class="scene-guide__mobile">Swipe sideways to orbit · Pinch or +/− to travel</span>
+        </p>
 
-<div id="canvas-container">
-  <canvas id="main-canvas"></canvas>
-</div>
+        <div class="metric-deck" role="group" aria-label="Live observation metrics">
+          <dl class="metric">
+            <dt>Connected now <span>Live</span></dt>
+            <dd data-tone="empty"><strong id="metric-connected">0</strong><small>Current libp2p connections</small></dd>
+          </dl>
+          <dl class="metric">
+            <dt>Tracked view <span>Capped</span></dt>
+            <dd><strong id="metric-observed">0</strong><small>Recent peers · maximum 512</small></dd>
+          </dl>
+          <dl class="metric">
+            <dt>Median latency <span>Measured</span></dt>
+            <dd><strong id="metric-latency">—</strong><small id="metric-latency-samples">0 / 0 live pings</small></dd>
+          </dl>
+          <dl class="metric">
+            <dt>P95 latency <span>Measured</span></dt>
+            <dd><strong id="metric-p95">—</strong><small>Tail of the same live sample</small></dd>
+          </dl>
+        </div>
 
-<div id="hud">
-  <div id="header">
-    <div class="logo">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="1.5" aria-hidden="true">
-        <circle cx="12" cy="12" r="3"/>
-        <circle cx="4"  cy="6"  r="2"/>
-        <circle cx="20" cy="6"  r="2"/>
-        <circle cx="4"  cy="18" r="2"/>
-        <circle cx="20" cy="18" r="2"/>
-        <line x1="12" y1="9"  x2="5"  y2="7"/>
-        <line x1="12" y1="9"  x2="19" y2="7"/>
-        <line x1="12" y1="15" x2="5"  y2="17"/>
-        <line x1="12" y1="15" x2="19" y2="17"/>
-      </svg>
-      IPFS_UNIVERSE
-    </div>
-    <span id="renderer-badge">DETECTING…</span>
-    <button class="btn renderer-toggle" id="btn-renderer-toggle" onclick="toggleRenderer()" title="Switch WebGPU ⇄ WebGL">⇄ GPU</button>
-    <div class="header-actions">
-      <button class="btn primary" id="btn-wallet" onclick="connectWallet()">&#x2B21; Connect Wallet</button>
-    </div>
-  </div>
+        <p class="scope-note">
+          <strong>Observation scope</strong>
+          This browser’s reachable neighborhood, capped at 512 recent peers; not the entire IPFS network.
+        </p>
 
-  <div class="panel" id="panel-left">
-    <div class="panel-title">// network_stats</div>
-    <div class="stat-row">
-      <span><span class="dot" id="dot-peers"></span>gateways_live</span>
-      <span class="stat-val" id="stat-peers">0</span>
-    </div>
-    <div class="stat-row">
-      <span>peers_stored</span>
-      <span class="stat-val" id="stat-peers-stored">0</span>
-    </div>
-    <div class="stat-row">
-      <span>wallet</span>
-      <span class="stat-val" id="stat-nodeid" style="font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis">—</span>
-    </div>
-    <div class="stat-row">
-      <span>uptime</span>
-      <span class="stat-val live" id="stat-uptime">00:00:00</span>
-    </div>
-    <div class="stat-row">
-      <span>blocks_fetched</span>
-      <span class="stat-val live" id="stat-blocks">0</span>
-    </div>
-  </div>
+        <p class="sr-only" id="scene-description">
+          The center represents this browser’s Helia node. Bright green nodes are currently
+          connected peers and have a line to the center. Violet nodes were discovered but are
+          not presented as connected. Distance from the center maps measured latency; unmeasured
+          peers occupy the outer orbit, and angle groups the observed transport. Decorative
+          background stars do not represent peers. Use the peer explorer for the same information
+          in text form.
+        </p>
+      </section>
+    </main>
 
-  <div class="panel" id="panel-right">
-    <div class="panel-title">// renderer_info</div>
-    <div class="stat-row">
-      <span>renderer</span>
-      <span class="stat-val" id="info-api">—</span>
-    </div>
-    <div class="stat-row">
-      <span>worker_status</span>
-      <span class="stat-val" id="info-worker">idle</span>
-    </div>
-    <div class="stat-row">
-      <span>particles</span>
-      <span class="stat-val live" id="info-particles">—</span>
-    </div>
-    <div class="stat-row">
-      <span>fps</span>
-      <span class="stat-val live" id="info-fps">—</span>
-    </div>
-    <div class="stat-row">
-      <span>engine</span>
-      <span class="stat-val" id="info-engine">Three.js r168</span>
-    </div>
-  </div>
+    <dialog class="peer-dialog" id="peer-dialog" aria-labelledby="peer-dialog-title">
+      <div class="peer-dialog__surface">
+        <div class="peer-dialog__header">
+          <div>
+            <p class="eyebrow">Observable neighborhood</p>
+            <h2 id="peer-dialog-title">Peer explorer</h2>
+          </div>
+          <button class="dialog-close" id="peer-dialog-close" type="button" aria-label="Close peer explorer">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        <p class="peer-dialog__summary" id="peer-summary">
+          Waiting for the browser node to report peers.
+        </p>
+        <div class="peer-legend" role="group" aria-label="Peer state legend">
+          <span><i class="legend-dot legend-dot--connected" aria-hidden="true"></i>Connected</span>
+          <span><i class="legend-dot legend-dot--discovered" aria-hidden="true"></i>Discovered</span>
+          <span><i class="legend-dot legend-dot--disconnected" aria-hidden="true"></i>Disconnected</span>
+        </div>
+        <div class="peer-tools">
+          <label>
+            <span>Find peer</span>
+            <input id="peer-search" type="search" autocomplete="off" spellcheck="false" placeholder="Peer ID" />
+          </label>
+          <label>
+            <span>State</span>
+            <select id="peer-filter" aria-label="Filter peers by state">
+              <optgroup label="Peer state">
+                <option value="all">All states</option>
+                <option value="connected">Connected</option>
+                <option value="discovered">Discovered</option>
+                <option value="disconnected">Disconnected</option>
+              </optgroup>
+            </select>
+          </label>
+          <output id="peer-result-count" for="peer-search peer-filter">0 shown</output>
+        </div>
+        <div class="local-kubo">
+          <button class="text-button" id="kubo-probe" type="button">Read local daemon</button>
+          <span id="kubo-status" role="status">Browser Helia is the default source.</span>
+        </div>
+        <ol class="peer-list" id="peer-list" aria-label="Observed IPFS peers"></ol>
+        <p class="peer-empty" id="peer-empty">
+          No browser-reachable peers have been observed yet. Discovery can take a moment and
+          depends on the transports available to this browser.
+        </p>
+        <div class="local-history">
+          <p><strong>On-device history</strong><span id="history-count">Checking previous visits…</span></p>
+          <button class="text-button" id="history-clear" type="button">Clear local history</button>
+        </div>
+      </div>
+    </dialog>
 
-  <div id="log">
-    <span id="log-label">LOG &gt;</span>
-    <div id="log-entries"></div>
-  </div>
-</div>
-
-<div id="legacy-tooltip"></div>
-<div id="node-tooltip">
-  <div class="glitch-overlay"></div>
-  <div class="tooltip-header">
-    <span class="tooltip-title">PEER_NODE_DATA</span>
-    <span class="dot live"></span>
-  </div>
-  <div class="tooltip-body">
-    <div class="tooltip-row"><span class="tooltip-label">NODE_ID:</span> <span id="tt-id" class="tooltip-val id">...</span></div>
-    <div class="tooltip-row"><span class="tooltip-label">LATENCY:</span> <span id="tt-lat" class="tooltip-val lat">...</span></div>
-    <div class="tooltip-row"><span class="tooltip-label">PROTOCOL:</span> <span id="tt-protocol" class="tooltip-val">...</span></div>
-    <div class="tooltip-row"><span class="tooltip-label">STABILITY:</span> <span id="tt-stability" class="tooltip-val" style="color: var(--color-accent)">...</span></div>
-    <div class="tooltip-row"><span class="tooltip-label">ROUTING:</span> <span id="tt-path" class="tooltip-val">...</span></div>
-    <div class="tooltip-row"><span class="tooltip-label">GEOLOC:</span> <span id="tt-loc" class="tooltip-val">...</span></div>
-    <div class="tooltip-row"><span class="tooltip-label">STATUS:</span> <span id="tt-status" class="tooltip-val live">...</span></div>
-    
-    <div class="hud-bars">
-      <div class="hud-bar"><div class="hud-bar-inner" style="width: 70%"></div></div>
-      <div class="hud-bar"><div class="hud-bar-inner" style="width: 40%"></div></div>
-      <div class="hud-bar"><div class="hud-bar-inner" style="width: 90%"></div></div>
-      <div class="hud-bar"><div class="hud-bar-inner" style="width: 20%"></div></div>
-    </div>
-
-    <div style="margin-top: 12px; height: 2px; background: rgba(88,166,255,0.1); position: relative; overflow: hidden;">
-      <div id="tt-progress" style="position: absolute; left: 0; top: 0; height: 100%; width: 30%; background: var(--color-primary); box-shadow: 0 0 10px var(--color-primary);"></div>
-    </div>
-  </div>
-</div>
-
-
-<style>
-  @keyframes progress_sim {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(200%); }
-  }
-</style>
-
-<script type="module" src="./src/main.ts"></script>
-
-</body>
+    <div class="sr-only" id="aggregate-live" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

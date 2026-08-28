@@ -1,104 +1,80 @@
-# 🌌 IPFS Universe 2.0
+# Peerstellation
 
+![Peerstellation live peer observatory](./public/hero.png)
 
-<!-- AUTO-PACKAGE-BADGES:START -->
+> **A browser's reachable neighbourhood, rendered as a living sky.**
 
-<!-- AUTO-PACKAGE-BADGES:END -->
-![IPFS Universe Hero](./public/hero.png)
+Peerstellation is a web-only 3D observatory for real Helia/libp2p observations. The first viewport is intentionally quiet: the sky is the interface, and a node reveals its own details only when hovered, focused, or tapped. No peer, latency, or topology claim is invented.
 
-> **A premium, real-time 3D visualization of the IPFS network.**
-> Powered by **WebGPU**, **WASM (Zig/Rust)**, and **Helia**.
+[![Live site](https://img.shields.io/badge/live-ipfsuniverse.xyz-ccff66?style=for-the-badge)](https://ipfsuniverse.xyz)
+[![TypeScript](https://img.shields.io/badge/TypeScript-only-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/license-MIT-ccff66?style=for-the-badge)](LICENSE)
 
-[![Live Site](https://img.shields.io/badge/Live-ipfsuniverse.xyz-58a6ff?style=for-the-badge&logo=ipfs&logoColor=white)](https://ipfsuniverse.xyz)
-[![Tech Stack](https://img.shields.io/badge/Stack-TypeScript%20%7C%20WebGPU%20%7C%20WASM-blue?style=for-the-badge)](https://github.com/tadanobutubutu/ipfs-universe)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+## 体験
 
----
+- ページ内で起動した Helia ブラウザノードの接続・発見・切断・ping・identify をリアルタイムに観測します。
+- ノードをカーソルで指す、キーボードで選ぶ、スマホでタップする、とその場所にアンカーされたカードへ Peer ID、状態、遅延、方向、transport、protocols、agent/protocol version、アドレス件数を表示します。
+- 接続線はこの観測ノードから実際に開いている接続だけです。リモートノード同士の線は、両端から裏付けられた関係がない限り描きません。見栄えのためにトポロジーを捏造しない方針です。
+- Zig WebAssembly は安定した全方位の配置と近遠の分布、Rust WebAssembly は接続数・遅延統計を担当し、軽い制御と表示は厳密な TypeScript で実装しています。
 
-## ✨ Overview
+## Helia と IPFS Desktop の数字が違う理由
 
-**IPFS Universe** is a cutting-edge engine designed to visualize the decentralized structure of the InterPlanetary File System. By leveraging modern web technologies, it transforms abstract network peer connections into a cinematic, interactive 3D celestial experience.
+IPFS Desktop の Kubo は TCP/QUIC の常駐ノードです。一方、ブラウザの Helia はブラウザが扱える WebSocket、WebRTC、リレー等だけで別の短命ノードを起動します。そのため Desktop に多数のピアがいても、ページの `connected` が 0〜数件になるのは正常です。ピア表は共有されません。
 
-### 💎 Premium Design & UX
-
-- **Orbitron Typography**: Futuristic, high-tech visual identity.
-- **Glassmorphism HUD**: Translucent, blurred UI panels for a premium "Mission Control" feel.
-- **Cinematic Bloom**: Unreal-style post-processing for glowing particles and core.
-- **Interactive Parallax**: Dynamic HUD tilting based on mouse movement for deep spatial immersion.
-
----
-
-## 🛠 Technology Stack
-
-### 🚀 High-Performance Engine
-
-- **Three.js r168**: The backbone of the 3D rendering pipeline.
-- **WebGPU Native**: Utilizing the latest browser graphics API for thousands of simultaneous particles.
-- **WebGL 1.0 Fallback**: Intelligent detection for older devices/browsers.
-
-### ⚙️ WASM-Accelerated Physics
-
-- **Zig & Rust WASM**: Core physics calculations (velocity, gravity, collision) are handled in WebAssembly, bypassing JavaScript's garbage collection and main-thread overhead.
-- **SharedArrayBuffer**: Lock-free concurrency using `Atomics` to sync peer data between Workers and the Main Thread.
-
-### 🌐 Decentralized Core
-
-- **Helia (IPFS)**: A full IPFS node running directly in your browser. No central relays, just pure P2P.
-- **IndexedDB**: Persistent storage for peer history and network metadata via `idb`.
-- **MetaMask Integration**: Connect your wallet to generate a unique Node ID and customize your universe's aesthetic.
-
----
-
-## 📦 Architecture
-
-```mermaid
-graph TD
-    A[Main Thread / UI] -->|Post-processing| B(EffectComposer / Bloom)
-    A -->|Input| C[GSAP Parallax / OrbitControls]
-    D[Helia Worker] -->|Discovery| E[SharedArrayBuffer]
-    E -->|Peer Stats| A
-    F[WASM Physics Engine] -->|Position Data| A
-    G[IndexedDB] <-->|Persistence| D
-```
-
----
-
-## 🚀 Getting Started
+Peer explorer の **Read local daemon** は明示的に押した時だけ `127.0.0.1:5001/api/v0/id` と `swarm/peers` を読みます。CORS が許可されていない場合は画面に止まり、Kubo の全 RPC を `*` に開放することはありません。ローカル接続を許可する場合も、開発元だけの厳密な Origin を設定してから IPFS Desktop を再起動してください。
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/tadanobutubutu/ipfs-universe.git
+# 例: 開発時だけ許可する Origin。* は使わない
+ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin \
+  '["http://127.0.0.1:4176"]'
+```
 
-# 2. Enter the void
-cd ipfs-universe
+本番ページから利用者のローカルデーモンを自動探索することはありません。WebTransport/WebRTC の公告アドレスがあり、ユーザーが明示的に接続を選んだ場合だけ、別途対応します。
 
-# 3. Install dependencies
+## 開発
+
+```bash
+git clone https://github.com/tadanobutubutu/peerstellation.git
+cd peerstellation
 npm install
-
-# 4. Ignite the engine
-npm run ipfsuniverse
+npm run dev
 ```
 
-### 🏠 Local Development (Workspace)
+| コマンド | 用途 |
+| --- | --- |
+| `npm run dev` | Vite 開発サーバー |
+| `npm run build` | Zig/Rust WASM と静的配布物を生成 |
+| `npm run check` | 型検査・単体テスト・本番ビルド |
+| `npm run test:e2e` | Playwright、axe、レスポンシブ、WebGL フォールバック |
+| `npm run deploy:cloudflare` | Wrangler で静的配信を更新 |
+| `npm run deploy:pinata` | `PINATA_JWT` がある時だけ CID をピン |
 
-When running inside the parent workspace alongside other projects (e.g. Remotion), use the dedicated command:
+CLI で同梱 Kubo を確認する場合（アプリを停止・変更しません）:
 
 ```bash
-# From workspace root
-npm run ipfsuniverse          # Start IPFS Universe dev server (port 5173)
-npm run ipfsuniverse:build    # Production build
-
-# Or directly from ipfs-universe/
-cd ipfs-universe && npm run ipfsuniverse
+/Applications/IPFS\ Desktop.app/Contents/Resources/app.asar.unpacked/node_modules/kubo/kubo/ipfs swarm peers --verbose
 ```
 
----
+## 設計と安全境界
 
-## 📜 Dev Rituals
+```text
+Helia/libp2p ── typed observations ── PeerReducer (最大512)
+       │                                  ├── IndexedDB (公開IDの端末内履歴のみ)
+       │                                  └── ThreeUniverse (WebGL2 + picking tooltip)
+       ├── Read local daemon (明示操作時のみ Kubo RPC/CORS)
+       └── Zig: 配置・物理 / Rust: 集計
+```
 
-The project maintains a **Legacy XHR Ritual** layer. While modern nodes use `Fetch`, we retain `XMLHttpRequest` for network probing as a tribute to the early days of the web. Trigger it via the **Probe Network** button in the HUD.
+秘密鍵、Kubo 認証情報、Pinata トークンはブラウザへ渡しません。CSP、COOP/COEP/CORP、HSTS、厳格な Permissions Policy、ハッシュ付き静的資産キャッシュを配信します。IPFS はプロトコル名として技術文書で扱いますが、製品名・ロゴは独自の **Peerstellation** に分離しました。名称は GitHub/npm/一般検索の完全一致を予備調査した結果であり、商標の法的なクリアランスを意味しません。
 
----
+## 無料運用と収益化の境界
 
-Built with 🌌 by [tadanobutubutu](https://github.com/tadanobutubutu)
+静的配信は Cloudflare Workers Static Assets を既定にし、無料枠内の公開体験を維持します。広告、指紋採取、第三者トラッカーは入れません。支援導線は別リリースで GitHub Sponsors 等を設定できるようにし、運営費が必要になった場合だけ、次の順序で拡張します。
 
+1. 透明な個人支援（GitHub Sponsors / Ko-fi）
+2. CID 固定の到達性レポートと CSV/JSON エクスポート
+3. 企業向けの認証済み履歴・監視機能（公開版の観測範囲とは分離）
+
+## ライセンス
+
+MIT © [tadanobutubutu](https://github.com/tadanobutubutu)
