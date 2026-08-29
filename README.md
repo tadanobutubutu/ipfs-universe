@@ -47,6 +47,7 @@ npm run dev
 | `npm run check` | 型検査・単体テスト・本番ビルド |
 | `npm run test:e2e` | Playwright、axe、レスポンシブ、WebGL フォールバック |
 | `npm run test:a11y` | html-validate と Pa11y（axe + HTML CodeSniffer）の WCAG 2 AA 監査 |
+| `npm run lint:docs` | Vale の自作 AI-fluff 規則で README と docs を検査（vale-ai-tells を使う場合も同じ入口） |
 | `npm run test:lighthouse` | 本番ビルドを Lighthouse CLI（性能・アクセシビリティ・ベストプラクティス・SEO・Agentic Browsing）で計測 |
 | `npm run deploy:cloudflare` | Wrangler で静的配信を更新 |
 | `npm run deploy:pinata` | `PINATA_JWT` がある時だけ CID をピン |

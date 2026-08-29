@@ -1,0 +1,9 @@
+extends: existence
+message: "Prefer a concrete claim or measurement over generic AI-flavored wording: '%s'."
+level: warning
+tokens:
+  - '\bseamless(?:ly)?\b'
+  - '\bgame[- ]?changer\b'
+  - '\bnext[- ]?generation\b'
+  - '\brevolutionary\b'
+  - '\bcutting[- ]?edge\b'
