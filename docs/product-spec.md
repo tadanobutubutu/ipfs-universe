@@ -110,8 +110,8 @@
 
 - Zig WASMはノード位置・速度・反発・中心/リレー線分の位置と輝度を計算し、Three.jsの`BufferAttribute`へ線形メモリを直接公開する。
 - Rust WASMはピア集計と遅延統計を計算する。
-- Three.jsのWebGLコンテキスト、シーン/マテリアル生成、GPUリソース寿命、DOMイベント、アクセシブルなテキストUIはブラウザAPIの所有範囲であり、TypeScriptが担当する。これらをRust/Zigへ移すには別のWebGLバインディングとJSホストが必要で、Three.jsそのものをWASMへコンパイルすることはできない。
-- `three-ui` 1.1.1はReact 16向けの古い2Dコンポーネント集でThree.js UIではない。`@darrylondil/react-three-ui` 0.2.0はReact Three Fiber専用の別ライブラリであり、現行のDOMアクセシビリティと初期性能を壊さないため、全画面置換には使わない。
+- Three.jsのWebGPU/WebGLコンテキスト、シーン/マテリアル生成、GPUリソース寿命、DOMイベント、アクセシブルなテキストUIはブラウザAPIの所有範囲であり、TypeScriptが担当する。描画は `WebGPURenderer` を第一候補にし、初期化できない環境では同じCanvas上のWebGL2バックエンドへ自動フォールバックする。これらをRust/Zigへ移すには別のGPUバインディングとJSホストが必要で、Three.jsそのものをWASMへコンパイルすることはできない。
+- `three-ui` 1.1.1はReact 16向けの古い2Dコンポーネント集でThree.js UIではない。`@darrylondil/react-three-ui` 0.2.0はReact Three Fiber専用の別ライブラリであり、現行のDOMアクセシビリティと初期性能を壊さないため、全画面置換には使わない。CSSはTailwind CSS 4.3のViteプラグインで設計トークンを管理し、React/Babel/PostCSSを前提とするStyleXは採用しない。
 
 ## 8. 安全性
 

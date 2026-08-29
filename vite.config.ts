@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 const isolationHeaders = {
@@ -21,6 +22,7 @@ const securityHeaders = {
 };
 
 export default defineConfig({
+  plugins: [tailwindcss()],
   server: {
     headers: isolationHeaders,
   },
@@ -32,9 +34,11 @@ export default defineConfig({
     // Keep source maps out of the static deployment: the public repository is
     // the source of truth, and production should not ship several extra MB.
     sourcemap: false,
-    // The only larger assets are lazy, cacheable Three.js and Helia vendor
-    // chunks; neither blocks the first shell paint.
-    chunkSizeWarningLimit: 700,
+    // The WebGPU entry intentionally carries both the WebGPU and WebGL2
+    // backends for runtime fallback. It is lazy and cacheable, so keep an
+    // explicit 800 kB warning budget instead of treating this dual-backend
+    // asset as an initial-shell regression.
+    chunkSizeWarningLimit: 800,
     rolldownOptions: {
       output: {
         // Keep the WebGL renderer out of the first shell chunk. The scene is

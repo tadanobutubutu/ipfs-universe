@@ -44,6 +44,7 @@ test('shows the 3D observatory immediately with semantic structure', async ({
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
     timeout: 3_000,
   });
+  await expect(canvas).toHaveAttribute('data-renderer', /^(WebGPU|WebGL 2)$/u);
 
   const canvasSize = await canvas.evaluate((element) => {
     const canvasElement = element as HTMLCanvasElement;
@@ -54,10 +55,31 @@ test('shows the 3D observatory immediately with semantic structure', async ({
   expect(pageErrors).toEqual([]);
 });
 
+test('falls back to WebGL2 when WebGPU is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'gpu', {
+      configurable: true,
+      value: undefined,
+    });
+  });
+  await page.goto('/');
+
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
+    timeout: 3_000,
+  });
+  await expect(page.locator('#universe-canvas')).toHaveAttribute(
+    'data-renderer',
+    'WebGL 2',
+  );
+});
+
 test('supports keyboard navigation, motion pause, and peer details', async ({
   page,
 }) => {
   await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
+    timeout: 3_000,
+  });
   await page.keyboard.press('Tab');
   await expect(page.locator('.skip-link')).toBeFocused();
 
@@ -68,6 +90,7 @@ test('supports keyboard navigation, motion pause, and peer details', async ({
   await expect(page.locator('html')).toHaveAttribute('data-motion', 'paused');
 
   const canvas = page.locator('#universe-canvas');
+  await expect(canvas).toHaveAttribute('data-camera-distance', /\d/u);
   await canvas.focus();
   const distanceBefore = Number(
     await canvas.getAttribute('data-camera-distance'),
@@ -349,7 +372,7 @@ test('preserves the focused peer and its expanded state across live updates', as
   await expectNoAutomatedAccessibilityViolations(page);
 });
 
-test('keeps text access visible when WebGL initialization fails', async ({
+test('keeps text access visible when GPU initialization fails', async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -367,6 +390,13 @@ test('keeps text access visible when WebGL initialization fails', async ({
       }
       return Reflect.apply(original, this, [contextId, ...arguments_]);
     };
+    // WebGPURenderer prefers navigator.gpu and only then falls back to
+    // WebGL2. Disable both backends so the accessible DOM fallback is tested
+    // independently of the browser's native WebGPU availability.
+    Object.defineProperty(navigator, 'gpu', {
+      configurable: true,
+      value: undefined,
+    });
   });
   await page.goto('/');
 

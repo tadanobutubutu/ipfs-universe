@@ -22,14 +22,15 @@ import {
   PerspectiveCamera,
   Points,
   PointsMaterial,
+  type Renderer,
   Scene,
   SphereGeometry,
   SRGBColorSpace,
   type Texture,
   TorusGeometry,
   Vector3,
-  WebGLRenderer,
-} from 'three';
+  WebGPURenderer,
+} from 'three/webgpu';
 
 import type { PeerRecord } from '../network/peer-types';
 import type { PhysicsWasm } from '../wasm/load-wasm';
@@ -59,14 +60,29 @@ export interface NodeInteraction {
   readonly pinned: boolean;
 }
 
-export function createUniverseScene(canvas: HTMLCanvasElement): UniverseScene {
-  return new ThreeUniverseScene(canvas);
+export async function createUniverseScene(
+  canvas: HTMLCanvasElement,
+): Promise<UniverseScene> {
+  const renderer = new WebGPURenderer({
+    alpha: true,
+    antialias: !(window.innerWidth < 640),
+    canvas,
+    depth: true,
+    powerPreference: 'high-performance',
+  });
+  try {
+    await renderer.init();
+    return new ThreeUniverseScene(canvas, renderer);
+  } catch (error) {
+    renderer.dispose();
+    throw error;
+  }
 }
 
 class ThreeUniverseScene implements UniverseScene {
-  readonly rendererName = 'WebGL 2';
+  readonly rendererName: string;
   readonly #canvas: HTMLCanvasElement;
-  readonly #renderer: WebGLRenderer;
+  readonly #renderer: Renderer;
   readonly #scene = new Scene();
   readonly #camera = new PerspectiveCamera(48, 1, 0.1, 420);
   readonly #lookTarget = new Vector3();
@@ -126,36 +142,17 @@ class ThreeUniverseScene implements UniverseScene {
   #pointerDownY = 0;
   #pointerDownIndex?: number;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, renderer: Renderer) {
     this.#canvas = canvas;
+    this.#renderer = renderer;
+    const backend = renderer.backend as { readonly isWebGPUBackend?: boolean };
+    this.rendererName = backend.isWebGPUBackend ? 'WebGPU' : 'WebGL 2';
     this.#basePixelRatio = Math.min(
       window.devicePixelRatio || 1,
       window.innerWidth < 640 ? 1.25 : 1.5,
     );
     this.#pixelRatio = this.#basePixelRatio;
     const mobileQuality = window.innerWidth < 640;
-    const antialias = !mobileQuality && this.#basePixelRatio <= 1.25;
-    const context = canvas.getContext('webgl2', {
-      alpha: true,
-      antialias,
-      depth: true,
-      failIfMajorPerformanceCaveat: true,
-      powerPreference: 'high-performance',
-      stencil: false,
-    });
-    if (context === null) {
-      throw new Error('WebGL 2 is unavailable in this browser context');
-    }
-    this.#renderer = new WebGLRenderer({
-      canvas,
-      context,
-      alpha: true,
-      antialias,
-      depth: true,
-      failIfMajorPerformanceCaveat: true,
-      powerPreference: 'high-performance',
-      stencil: false,
-    });
     this.#renderer.setClearColor(0x050508, 0);
     this.#renderer.setPixelRatio(this.#pixelRatio);
     this.#renderer.outputColorSpace = SRGBColorSpace;
@@ -203,14 +200,15 @@ class ThreeUniverseScene implements UniverseScene {
     this.#bindControls();
     this.#resize();
     this.#updateCamera(true);
-    // Leave the first draw to the scheduled animation frame. Keeping WebGL
-    // shader compilation out of the module-construction task prevents one
+    // Leave the first draw to the scheduled animation frame. Keeping shader
+    // compilation out of the module-construction task prevents one
     // monolithic long task on throttled mobile CPUs while the CSS sky remains
     // visible underneath the transparent canvas.
     this.#canvas.dataset.drawCalls = '0';
     this.#canvas.dataset.sceneObjects = String(this.#scene.children.length);
     this.#canvas.dataset.pixelRatio = this.#pixelRatio.toFixed(2);
     this.#canvas.dataset.edgeSegments = '0';
+    this.#canvas.dataset.renderer = this.rendererName;
   }
 
   attachPhysics(physics: PhysicsWasm): void {
@@ -989,6 +987,11 @@ class ThreeUniverseScene implements UniverseScene {
 function createDecorativeDust(count: number): Points {
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
+  // PointsMaterial samples its map through a vertex UV in Three.js's WebGPU
+  // node backend. Keep a centered UV for every point so the soft sprite is
+  // visible there as well as in WebGL2, and avoid a missing-attribute warning.
+  const uvs = new Float32Array(count * 2);
+  uvs.fill(0.5);
   const neutral = new Color(0xd9e7df);
   const aurora = new Color(0x73fbd3);
   const violet = new Color(0xa897ff);
@@ -1019,6 +1022,7 @@ function createDecorativeDust(count: number): Points {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
   geometry.setAttribute('color', new BufferAttribute(colors, 3));
+  geometry.setAttribute('uv', new BufferAttribute(uvs, 2));
   const material = new PointsMaterial({
     vertexColors: true,
     size: 0.48,

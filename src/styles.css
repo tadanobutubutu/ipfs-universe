@@ -1,3 +1,21 @@
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css";
+
+@theme {
+  --color-ink: #050508;
+  --color-ink-soft: #0b0b12;
+  --color-paper: #f4f2ea;
+  --color-paper-muted: #d1d0c7;
+  --color-paper-dim: #b5b6af;
+  --color-aurora: #73fbd3;
+  --color-aurora-bright: #c9ff70;
+  --color-violet: #a897ff;
+  --color-danger: #ff8d86;
+  --font-display: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  --font-editorial: Iowan Old Style, Baskerville, "Times New Roman", serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
 :root {
   color-scheme: dark;
   --ink: #050508;

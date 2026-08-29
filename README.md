@@ -48,7 +48,7 @@ npm run dev
 | `npm run quality` | Biome 2.5 のフォーマット・Lint・import整理を一括検査 |
 | `npm run format` | Biomeでコードを整形 |
 | `npm run lint` | BiomeのLintだけを実行 |
-| `npm run test:e2e` | Playwright、axe、レスポンシブ、WebGL フォールバック |
+| `npm run test:e2e` | Playwright、axe、レスポンシブ、WebGPU → WebGL2 フォールバック |
 | `npm run test:a11y` | html-validate と Pa11y（axe + HTML CodeSniffer）の WCAG 2 AA 監査 |
 | `npm run lint:docs` | Vale の自作 AI-fluff 規則で README と docs を検査（vale-ai-tells を使う場合も同じ入口） |
 | `npm run test:lighthouse` | 本番ビルドを Lighthouse CLI（性能・アクセシビリティ・ベストプラクティス・SEO・Agentic Browsing）で計測 |
@@ -72,7 +72,7 @@ CLI で同梱 Kubo を確認する場合（アプリを停止・変更しませ�
 ```text
 Helia/libp2p ── typed observations ── PeerReducer (最大512)
        │                                  ├── IndexedDB (公開IDの端末内履歴のみ)
-       │                                  └── ThreeUniverse (WebGL2 + picking tooltip)
+       │                                  └── ThreeUniverse (WebGPU → WebGL2 + picking tooltip)
        ├── Kubo probe (ヘッダーからの明示操作時のみ Kubo RPC/CORS)
        └── Zig: 配置・物理・線分バッファ / Rust: 集計
 ```
@@ -81,15 +81,15 @@ Helia/libp2p ── typed observations ── PeerReducer (最大512)
 
 ### ツールチェーンとThree UIの判断
 
-TypeScriptはnpmの現行安定版 **7.0.2** を固定し、静的解析と整形は **Biome 2.5.11** に統一しています。このリポジトリにはESLint設定・依存・実行入口はありません。
+TypeScriptはnpmの現行安定版 **7.0.2** を固定し、静的解析と整形は **Biome 2.5.11** に統一しています。このリポジトリにはESLint設定・依存・実行入口はありません。CSSは **Tailwind CSS 4.3.3** のViteプラグインを使い、色・文字の設計トークンをコンパイル時に生成します。現在のClaudeデザイン固有の軌道・星空・ホバー配置は既存のCSSで保持し、Tailwindユーティリティへ段階的に移行できる構成です。
 
-「three-ui」というnpmパッケージ（1.1.1）は2020年公開のReact 16 + Material UI部品集で、Three.jsの3D UIではありません。現行の `@darrylondil/react-three-ui`（0.2.0）はReact Three Fiber専用の別設計です。Peerstellationは軽量なバニラTypeScript、DOMの意味構造、WCAG向けキーボード操作を既に採用しているため、これらを全画面へ置き換えると初期JSとアクセシビリティの保証を失います。そこでClaudeの宇宙デザインは維持し、情報カードと一覧は意味のあるDOM、3D空間だけをThree.jsで描画します。将来Three UIを使う場合も、実測したアクセシビリティと性能を満たす限定的な視覚レイヤーとして導入します。
+「three-ui」というnpmパッケージ（1.1.1）は2020年公開のReact 16 + Material UI部品集で、Three.jsの3D UIではありません。現行の `@darrylondil/react-three-ui`（0.2.0）はReact Three Fiber専用の別設計です。Peerstellationは軽量なバニラTypeScript、DOMの意味構造、WCAG向けキーボード操作を既に採用しているため、これらを全画面へ置き換えると初期JSとアクセシビリティの保証を失います。そこでClaudeの宇宙デザインは維持し、情報カードと一覧は意味のあるDOM、3D空間だけをThree.jsで描画します。将来Three UIを使う場合も、実測したアクセシビリティと性能を満たす限定的な視覚レイヤーとして導入します。Tailwindは静的HTMLとバニラTypeScriptに適したゼロランタイムの選択であり、React/Babel/PostCSSを前提とするStyleXはこの構成へ導入していません。
 
 ### WASMとThree.jsの境界
 
 Zig WebAssemblyはノード位置、速度、中心引力、反発、減衰、中心/リレー線分の位置と輝度を計算し、Three.jsの `BufferAttribute` がその線形メモリを直接参照します。Rust WebAssemblyはピア集計と遅延統計を担当します。これで毎フレームの数値計算と配列コピーをTypeScriptから外しています。
 
-Three.js自身はブラウザのWebGL APIを呼び出すJavaScriptライブラリであり、DOM/WebGLコンテキストなしにRust/Zigだけで実行できません。そのため、Three.jsのシーン生成、WebGLリソース管理、描画呼び出し、DOMイベントとアクセシビリティはTypeScriptに残し、WASMを数値カーネルとして厳密に境界付けています。これは「Three.jsの処理を全部WASMにした」と偽装せず、ブラウザの実行モデルに沿った構成です。
+Three.js自身はブラウザのWebGPU/WebGL APIを呼び出すJavaScriptライブラリであり、DOM/GPUコンテキストなしにRust/Zigだけで実行できません。そのため、Three.jsのシーン生成、GPUリソース管理、描画呼び出し、DOMイベントとアクセシビリティはTypeScriptに残し、WASMを数値カーネルとして厳密に境界付けています。描画は `WebGPURenderer` を第一候補にし、ブラウザがWebGPUを初期化できない場合は同じCanvas上でThree.jsのWebGL2バックエンドへ自動フォールバックします。現在のマテリアルは両バックエンドで利用できる組み込みマテリアルに限定し、WebGPU未対応の `ShaderMaterial` や `onBeforeCompile` へ依存しません。これは「Three.jsの処理を全部WASMにした」と偽装せず、ブラウザの実行モデルに沿った構成です。
 
 ## 無料運用と収益化の境界
 

@@ -119,7 +119,7 @@ window.addEventListener(
 async function startScene(): Promise<void> {
   try {
     const { createUniverseScene } = await import('./scene/universe');
-    universe = createUniverseScene(canvas);
+    universe = await createUniverseScene(canvas);
     universe.onNodeInteraction(({ peer, x, y, pinned }) => {
       shell.showNodeDetails(peer, x, y, pinned);
     });
