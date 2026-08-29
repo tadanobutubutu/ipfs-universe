@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@types/three": "^0.184.1",
+    "@types/three": "^0.185.0",
     "esbuild": "^0.28.2",
     "rollup": "^4.62.5",
     "typescript": "^5.3.3",
@@ -31,6 +31,6 @@
     "gsap": "^3.12.5",
     "helia": "^6.1.4",
     "libp2p": "^3.3.9",
-    "three": "^0.168.0"
+    "three": "^0.185.0"
   }
 }
