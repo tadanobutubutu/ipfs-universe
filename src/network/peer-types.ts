@@ -74,9 +74,5 @@ export interface PeerState {
 
 export type PersistedPeer = Pick<
   PeerRecord,
-  | 'peerId'
-  | 'status'
-  | 'firstSeenAt'
-  | 'lastSeenAt'
-  | 'latencyMs'
+  'peerId' | 'status' | 'firstSeenAt' | 'lastSeenAt' | 'latencyMs'
 >;

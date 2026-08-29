@@ -1,27 +1,24 @@
+import { noise } from '@chainsafe/libp2p-noise';
+import { yamux } from '@chainsafe/libp2p-yamux';
+import { withLibp2pLight } from '@helia/libp2p';
+import { bootstrap } from '@libp2p/bootstrap';
+import { circuitRelayTransport } from '@libp2p/circuit-relay-v2';
+import { identify, identifyPush } from '@libp2p/identify';
 import type {
   Connection,
   IdentifyResult,
   Libp2p,
-  PeerInfo,
   PeerId,
+  PeerInfo,
   ServiceMap,
 } from '@libp2p/interface';
-import { bootstrap } from '@libp2p/bootstrap';
-import { circuitRelayTransport } from '@libp2p/circuit-relay-v2';
-import { identify, identifyPush } from '@libp2p/identify';
 import { mplex } from '@libp2p/mplex';
 import { ping } from '@libp2p/ping';
 import { webRTC, webRTCDirect } from '@libp2p/webrtc';
 import { webSockets } from '@libp2p/websockets';
-import { noise } from '@chainsafe/libp2p-noise';
-import { yamux } from '@chainsafe/libp2p-yamux';
 import { createHeliaLight } from 'helia';
-import { withLibp2pLight } from '@helia/libp2p';
 
-import type {
-  PeerConnectionDirection,
-  PeerObservation,
-} from './peer-types';
+import type { PeerConnectionDirection, PeerObservation } from './peer-types';
 
 const DEFAULT_PING_CONCURRENCY = 2;
 const DEFAULT_PING_INTERVAL_MS = 30_000;
@@ -50,7 +47,9 @@ export interface HeliaNetworkAdapter {
     event: AdapterEvent,
     listener: (remotePeer: ObservablePeer) => void,
   ): () => void;
-  onIdentify?(listener: (remotePeer: ObservablePeer, details: PeerDetails) => void): () => void;
+  onIdentify?(
+    listener: (remotePeer: ObservablePeer, details: PeerDetails) => void,
+  ): () => void;
   ping(remotePeer: ObservablePeer, signal: AbortSignal): Promise<number>;
   getPeerDetails?(remotePeer: ObservablePeer): Promise<PeerDetails | undefined>;
   stop(): Promise<void>;
@@ -443,11 +442,18 @@ async function createDefaultHeliaAdapter(): Promise<HeliaNetworkAdapter> {
       const peer = await libp2p.peerStore.get(remotePeer as PeerId);
       const readMetadata = (key: string): string | undefined => {
         const value = peer.metadata.get(key);
-        if (value === undefined || value.byteLength === 0 || value.byteLength > 256) return undefined;
+        if (
+          value === undefined ||
+          value.byteLength === 0 ||
+          value.byteLength > 256
+        )
+          return undefined;
         return new TextDecoder().decode(value).slice(0, 256);
       };
       return {
-        protocols: peer.protocols.slice(0, 32).map((value) => value.slice(0, 128)),
+        protocols: peer.protocols
+          .slice(0, 32)
+          .map((value) => value.slice(0, 128)),
         agentVersion: readMetadata('AgentVersion'),
         protocolVersion: readMetadata('ProtocolVersion'),
         addressCount: Math.min(peer.addresses.length, 128),
@@ -465,7 +471,8 @@ function subscribeToLibp2p<M extends ServiceMap>(
   listener: (remotePeer: ObservablePeer) => void,
 ): () => void {
   if (event === 'discovered') {
-    const handler = ({ detail }: CustomEvent<PeerInfo>): void => listener(detail.id);
+    const handler = ({ detail }: CustomEvent<PeerInfo>): void =>
+      listener(detail.id);
     libp2p.addEventListener('peer:discovery', handler);
     return () => libp2p.removeEventListener('peer:discovery', handler);
   }
@@ -502,7 +509,9 @@ function subscribeToIdentify(
 }
 
 function boundedIdentifyString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() !== '' ? value.slice(0, 256) : undefined;
+  return typeof value === 'string' && value.trim() !== ''
+    ? value.slice(0, 256)
+    : undefined;
 }
 
 function mapConnection(connection: Connection): ObservableConnection {

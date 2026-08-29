@@ -6,10 +6,20 @@ export type WasmFetcher = (url: string) => Promise<Response>;
 
 export interface PhysicsWasm {
   readonly maxNodes: number;
+  readonly maxEdges: number;
   initialize(count: number): void;
   seedNode(index: number, seed: number, radius: number, sector: number): void;
+  setPeerMetadata(
+    index: number,
+    status: PeerStatus,
+    latencyMs: number | undefined,
+    relayIndex: number,
+  ): void;
   step(deltaSeconds: number, count: number, motionScale: number): void;
   positions(count: number): Float32Array;
+  layoutEdges(count: number): number;
+  edgePositions(edgeCount: number): Float32Array;
+  edgeColors(edgeCount: number): Float32Array;
 }
 
 export interface PeerAnalytics {
@@ -40,14 +50,21 @@ export async function loadPhysicsWasm(
   const seedNode = exportedFunction(instance, 'seed_node');
   const step = exportedFunction(instance, 'step');
   const positionsPointer = integerResult(instance, 'positions_ptr');
+  const setPeerMetadata = exportedFunction(instance, 'set_peer_metadata');
+  const layoutEdges = exportedFunction(instance, 'layout_edges');
+  const edgePositionsPointer = integerResult(instance, 'edge_positions_ptr');
+  const edgeColorsPointer = integerResult(instance, 'edge_colors_ptr');
 
   if (maximum <= 0 || maximum > 100_000) {
     throw new Error('Zig WASMが不正なmax_nodesを返しました。');
   }
   createFloat32View(memory, positionsPointer, maximum * 3);
+  createFloat32View(memory, edgePositionsPointer, maximum * 12);
+  createFloat32View(memory, edgeColorsPointer, maximum * 12);
 
   return {
     maxNodes: maximum,
+    maxEdges: maximum * 2,
     initialize: (count) => {
       initialize(clampCount(count, maximum));
     },
@@ -57,6 +74,14 @@ export async function loadPhysicsWasm(
         Math.trunc(seed),
         Math.min(44, Math.max(8, finiteOr(radius, 40))),
         Math.min(4, Math.max(0, Math.trunc(finiteOr(sector, 4)))),
+      );
+    },
+    setPeerMetadata: (index, status, latencyMs, relayIndex) => {
+      setPeerMetadata(
+        Math.trunc(index),
+        statusCode(status),
+        finiteOr(latencyMs ?? -1, -1),
+        Math.trunc(relayIndex),
       );
     },
     step: (deltaSeconds, count, motionScale) => {
@@ -71,6 +96,22 @@ export async function loadPhysicsWasm(
         memory,
         positionsPointer,
         clampCount(count, maximum) * 3,
+      ),
+    layoutEdges: (count) => {
+      layoutEdges(clampCount(count, maximum));
+      return integerResult(instance, 'edge_count');
+    },
+    edgePositions: (count) =>
+      createFloat32View(
+        memory,
+        edgePositionsPointer,
+        clampCount(count, maximum * 2) * 6,
+      ),
+    edgeColors: (count) =>
+      createFloat32View(
+        memory,
+        edgeColorsPointer,
+        clampCount(count, maximum * 2) * 6,
       ),
   };
 }

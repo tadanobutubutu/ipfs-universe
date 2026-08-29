@@ -57,7 +57,9 @@ try {
   if (result.issues.length > 0) {
     console.error(JSON.stringify(result.issues, null, 2));
     process.exitCode = 1;
-    throw new Error(`Pa11y found ${result.issues.length} accessibility issues.`);
+    throw new Error(
+      `Pa11y found ${result.issues.length} accessibility issues.`,
+    );
   }
   console.log(`Pa11y axe + HTML CodeSniffer: 0 issues (${target})`);
 } finally {
@@ -78,10 +80,16 @@ function findChrome(): string | undefined {
   }
 
   const cacheRoot = join(process.env.HOME ?? '', '.cache', 'ms-playwright');
-  return findExecutable(cacheRoot, new Set(['chrome', 'chrome-headless-shell']));
+  return findExecutable(
+    cacheRoot,
+    new Set(['chrome', 'chrome-headless-shell']),
+  );
 }
 
-function findExecutable(root: string, names: ReadonlySet<string>): string | undefined {
+function findExecutable(
+  root: string,
+  names: ReadonlySet<string>,
+): string | undefined {
   if (!existsSync(root)) return undefined;
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     const path = join(root, entry.name);

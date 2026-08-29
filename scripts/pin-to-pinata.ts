@@ -1,4 +1,4 @@
-import { appendFile, lstat, readFile, readdir } from 'node:fs/promises';
+import { appendFile, lstat, readdir, readFile } from 'node:fs/promises';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -7,8 +7,7 @@ import {
   validateCid,
 } from './deployment-shared.ts';
 
-const pinataEndpoint =
-  'https://api.pinata.cloud/pinning/pinFileToIPFS';
+const pinataEndpoint = 'https://api.pinata.cloud/pinning/pinFileToIPFS';
 
 export interface DeploymentFile {
   absolutePath: string;
@@ -82,7 +81,9 @@ export async function collectDeploymentFiles(
 }
 
 function contentType(path: string): string {
-  return contentTypes[extname(path).toLowerCase()] ?? 'application/octet-stream';
+  return (
+    contentTypes[extname(path).toLowerCase()] ?? 'application/octet-stream'
+  );
 }
 
 async function parsePinataResponse(response: Response): Promise<string> {

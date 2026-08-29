@@ -60,14 +60,17 @@ describe('peer history privacy boundary', () => {
 
     const stored = await getAllPeers();
     expect(stored).toHaveLength(MAX_TRACKED_PEERS);
-    expect(stored.some(({ peerId }) => peerId === '12D3KooWStored')).toBe(false);
+    expect(stored.some(({ peerId }) => peerId === '12D3KooWStored')).toBe(
+      false,
+    );
     expect(
       stored.some(({ peerId }) => peerId === '12D3KooWPersisted0000'),
     ).toBe(false);
     expect(
-      stored.some(({ peerId }) =>
-        peerId ===
-        `12D3KooWPersisted${String(MAX_TRACKED_PEERS + 7).padStart(4, '0')}`,
+      stored.some(
+        ({ peerId }) =>
+          peerId ===
+          `12D3KooWPersisted${String(MAX_TRACKED_PEERS + 7).padStart(4, '0')}`,
       ),
     ).toBe(true);
   });

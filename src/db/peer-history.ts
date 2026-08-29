@@ -1,5 +1,5 @@
-import type { PersistedPeer, PeerStatus } from '../network/peer-types';
 import { MAX_TRACKED_PEERS } from '../network/peer-reducer';
+import type { PeerStatus, PersistedPeer } from '../network/peer-types';
 
 const DB_NAME = 'ipfs-universe-peers';
 const STORE_NAME = 'peer-history';
@@ -169,16 +169,10 @@ function sanitizePeer(value: unknown): PersistedPeer {
   if (!isNonNegativeFiniteNumber(firstSeenAt)) {
     throw new TypeError('Persisted firstSeenAt is invalid');
   }
-  if (
-    !isNonNegativeFiniteNumber(lastSeenAt) ||
-    lastSeenAt < firstSeenAt
-  ) {
+  if (!isNonNegativeFiniteNumber(lastSeenAt) || lastSeenAt < firstSeenAt) {
     throw new TypeError('Persisted lastSeenAt is invalid');
   }
-  if (
-    latencyMs !== undefined &&
-    !isNonNegativeFiniteNumber(latencyMs)
-  ) {
+  if (latencyMs !== undefined && !isNonNegativeFiniteNumber(latencyMs)) {
     throw new TypeError('Persisted latencyMs is invalid');
   }
 

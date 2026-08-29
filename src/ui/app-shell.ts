@@ -14,16 +14,14 @@ export class AppShell {
   );
   readonly #peerCount = requiredElement<HTMLElement>('header-peer-count');
   readonly #dialog = requiredElement<HTMLDialogElement>('peer-dialog');
-  readonly #dialogClose = requiredElement<HTMLButtonElement>(
-    'peer-dialog-close',
-  );
+  readonly #dialogClose =
+    requiredElement<HTMLButtonElement>('peer-dialog-close');
   readonly #peerList = requiredElement<HTMLOListElement>('peer-list');
   readonly #peerEmpty = requiredElement<HTMLElement>('peer-empty');
   readonly #peerSearch = requiredElement<HTMLInputElement>('peer-search');
   readonly #peerFilter = requiredElement<HTMLSelectElement>('peer-filter');
-  readonly #peerResultCount = requiredElement<HTMLOutputElement>(
-    'peer-result-count',
-  );
+  readonly #peerResultCount =
+    requiredElement<HTMLOutputElement>('peer-result-count');
   readonly #peerSummary = requiredElement<HTMLElement>('peer-summary');
   readonly #networkStatus = requiredElement<HTMLElement>('network-status');
   readonly #networkBeacon = requiredSelector<HTMLElement>(
@@ -46,17 +44,28 @@ export class AppShell {
   readonly #nodeTooltip = requiredElement<HTMLElement>('node-tooltip');
   readonly #nodeTooltipPeer = requiredElement<HTMLElement>('node-tip-peer');
   readonly #nodeTooltipState = requiredElement<HTMLElement>('node-tip-state');
-  readonly #nodeTooltipLatency = requiredElement<HTMLElement>('node-tip-latency');
-  readonly #nodeTooltipDirection = requiredElement<HTMLElement>('node-tip-direction');
-  readonly #nodeTooltipTransport = requiredElement<HTMLElement>('node-tip-transport');
-  readonly #nodeTooltipProtocols = requiredElement<HTMLElement>('node-tip-protocols');
+  readonly #nodeTooltipLatency =
+    requiredElement<HTMLElement>('node-tip-latency');
+  readonly #nodeTooltipDirection =
+    requiredElement<HTMLElement>('node-tip-direction');
+  readonly #nodeTooltipTransport =
+    requiredElement<HTMLElement>('node-tip-transport');
+  readonly #nodeTooltipProtocols =
+    requiredElement<HTMLElement>('node-tip-protocols');
   readonly #nodeTooltipAgent = requiredElement<HTMLElement>('node-tip-agent');
-  readonly #nodeTooltipProtocol = requiredElement<HTMLElement>('node-tip-protocol-version');
-  readonly #nodeTooltipAddresses = requiredElement<HTMLElement>('node-tip-addresses');
+  readonly #nodeTooltipProtocol = requiredElement<HTMLElement>(
+    'node-tip-protocol-version',
+  );
+  readonly #nodeTooltipAddresses =
+    requiredElement<HTMLElement>('node-tip-addresses');
   readonly #nodeTooltipRelay = requiredElement<HTMLElement>('node-tip-relay');
   readonly #nodeTooltipSource = requiredElement<HTMLElement>('node-tip-source');
-  readonly #headerNetworkState = requiredElement<HTMLElement>('header-network-state');
-  readonly #headerNetworkDot = requiredSelector<HTMLElement>('.connection-chip__dot');
+  readonly #headerNetworkState = requiredElement<HTMLElement>(
+    'header-network-state',
+  );
+  readonly #headerNetworkDot = requiredSelector<HTMLElement>(
+    '.connection-chip__dot',
+  );
   readonly #motionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
   readonly #motionListeners = new Set<MotionListener>();
   #paused = this.#motionMedia.matches;
@@ -89,14 +98,18 @@ export class AppShell {
     });
     this.#dialogClose.addEventListener('click', () => this.#dialog.close());
     this.#retryButton.addEventListener('click', () => this.#retryListener?.());
-    this.#peerSearch.addEventListener('input', () => this.#renderFilteredPeers());
+    this.#peerSearch.addEventListener('input', () =>
+      this.#renderFilteredPeers(),
+    );
     this.#peerFilter.addEventListener('change', () =>
       this.#renderFilteredPeers(),
     );
     this.#historyClear.addEventListener('click', () =>
       this.#clearHistoryListener?.(),
     );
-    this.#kuboProbe.addEventListener('click', () => this.#kuboProbeListener?.());
+    this.#kuboProbe.addEventListener('click', () =>
+      this.#kuboProbeListener?.(),
+    );
   }
 
   get motionPaused(): boolean {
@@ -150,16 +163,29 @@ export class AppShell {
       this.#nodeTooltipPeer.textContent = shortPeerId(peer.peerId);
       this.#nodeTooltipPeer.title = peer.peerId;
       this.#nodeTooltipState.textContent = statusLabel(peer.status);
-      this.#nodeTooltipLatency.textContent = peer.latencyMs === undefined ? 'unmeasured' : `${Math.round(peer.latencyMs)} ms`;
+      this.#nodeTooltipLatency.textContent =
+        peer.latencyMs === undefined
+          ? 'unmeasured'
+          : `${Math.round(peer.latencyMs)} ms`;
       this.#nodeTooltipDirection.textContent = peer.direction ?? 'not observed';
       this.#nodeTooltipTransport.textContent = peer.transport ?? 'not observed';
-      this.#nodeTooltipProtocols.textContent = peer.protocols?.length ? peer.protocols.join(', ') : 'not observed';
+      this.#nodeTooltipProtocols.textContent = peer.protocols?.length
+        ? peer.protocols.join(', ')
+        : 'not observed';
       this.#nodeTooltipAgent.textContent = peer.agentVersion ?? 'not observed';
-      this.#nodeTooltipProtocol.textContent = peer.protocolVersion ?? 'not observed';
-      this.#nodeTooltipAddresses.textContent = peer.addressCount === undefined ? 'not observed' : `${peer.addressCount}`;
-      this.#nodeTooltipRelay.textContent = peer.relayPeerId === undefined ? 'not observed' : shortPeerId(peer.relayPeerId);
+      this.#nodeTooltipProtocol.textContent =
+        peer.protocolVersion ?? 'not observed';
+      this.#nodeTooltipAddresses.textContent =
+        peer.addressCount === undefined
+          ? 'not observed'
+          : `${peer.addressCount}`;
+      this.#nodeTooltipRelay.textContent =
+        peer.relayPeerId === undefined
+          ? 'not observed'
+          : shortPeerId(peer.relayPeerId);
       this.#nodeTooltipRelay.title = peer.relayPeerId ?? '';
-      this.#nodeTooltipSource.textContent = peer.source === 'kubo' ? 'local Kubo' : 'browser Helia';
+      this.#nodeTooltipSource.textContent =
+        peer.source === 'kubo' ? 'local Kubo' : 'browser Helia';
     }
     this.#nodeTooltip.dataset.pinned = pinned ? 'true' : 'false';
     this.#nodeTooltip.style.left = `${x}px`;
@@ -173,30 +199,49 @@ export class AppShell {
     // layout has produced an offset box. Use the computed width as a safe
     // fallback so a narrow viewport never receives an unclamped card.
     const computed = getComputedStyle(this.#nodeTooltip);
-    const width = this.#nodeTooltip.offsetWidth || Number.parseFloat(computed.width) || Math.min(320, window.innerWidth - 16);
-    const height = this.#nodeTooltip.offsetHeight || Number.parseFloat(computed.height) || 220;
+    const width =
+      this.#nodeTooltip.offsetWidth ||
+      Number.parseFloat(computed.width) ||
+      Math.min(320, window.innerWidth - 16);
+    const height =
+      this.#nodeTooltip.offsetHeight ||
+      Number.parseFloat(computed.height) ||
+      220;
     const gap = 14;
     const rightCandidate = anchorX + gap;
     const leftCandidate = anchorX - gap - width;
     const maxLeft = Math.max(8, window.innerWidth - width - 8);
     // Prefer the node's right side, but flip to the left before clamping so
     // the card remains fully readable on narrow screens.
-    const left = rightCandidate + width <= window.innerWidth - 8
-      ? rightCandidate
-      : leftCandidate >= 8
-        ? leftCandidate
-        : Math.min(Math.max(8, rightCandidate), maxLeft);
-    const top = Math.min(Math.max(height / 2 + 8, anchorY), Math.max(height / 2 + 8, window.innerHeight - height / 2 - 8));
+    const left =
+      rightCandidate + width <= window.innerWidth - 8
+        ? rightCandidate
+        : leftCandidate >= 8
+          ? leftCandidate
+          : Math.min(Math.max(8, rightCandidate), maxLeft);
+    const top = Math.min(
+      Math.max(height / 2 + 8, anchorY),
+      Math.max(height / 2 + 8, window.innerHeight - height / 2 - 8),
+    );
     this.#nodeTooltip.style.left = `${left}px`;
     this.#nodeTooltip.style.top = `${top}px`;
     const edgeX = anchorX < left ? left : left + width;
     const edgeY = top;
     const deltaX = anchorX - edgeX;
     const deltaY = anchorY - edgeY;
-    this.#nodeTooltip.style.setProperty('--anchor-line-x', `${anchorX < left ? 0 : width}px`);
+    this.#nodeTooltip.style.setProperty(
+      '--anchor-line-x',
+      `${anchorX < left ? 0 : width}px`,
+    );
     this.#nodeTooltip.style.setProperty('--anchor-line-y', `${height / 2}px`);
-    this.#nodeTooltip.style.setProperty('--anchor-line-length', `${Math.hypot(deltaX, deltaY)}px`);
-    this.#nodeTooltip.style.setProperty('--anchor-line-angle', `${Math.atan2(deltaY, deltaX)}rad`);
+    this.#nodeTooltip.style.setProperty(
+      '--anchor-line-length',
+      `${Math.hypot(deltaX, deltaY)}px`,
+    );
+    this.#nodeTooltip.style.setProperty(
+      '--anchor-line-angle',
+      `${Math.atan2(deltaY, deltaX)}rad`,
+    );
     this.#nodeTooltip.style.setProperty(
       '--anchor-line-width',
       `${Math.min(2, 0.85 + Math.hypot(deltaX, deltaY) / 220)}px`,
@@ -236,7 +281,8 @@ export class AppShell {
     this.#networkBeacon.dataset.tone = tone;
     this.#headerNetworkDot.dataset.tone = tone;
     this.#networkStatus.textContent = message;
-    this.#headerNetworkState.textContent = tone === 'online' ? 'Live' : tone === 'error' ? 'Offline' : 'Connecting';
+    this.#headerNetworkState.textContent =
+      tone === 'online' ? 'Live' : tone === 'error' ? 'Offline' : 'Connecting';
     this.#retryButton.hidden = tone !== 'error';
     if (localPeerId !== undefined) {
       this.#localPeerId.textContent = shortPeerId(localPeerId);

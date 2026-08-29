@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -9,15 +9,14 @@ import {
 import { updateDnslink } from '../scripts/update-dnslink.ts';
 
 const temporaryDirectories: string[] = [];
-const validCid =
-  'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3fod4bu6vkp7jynbnqvistfva';
+const validCid = 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3fod4bu6vkp7jynbnqvistfva';
 
 afterEach(async () => {
   const { rm } = await import('node:fs/promises');
   await Promise.all(
-    temporaryDirectories.splice(0).map((path) =>
-      rm(path, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((path) => rm(path, { recursive: true, force: true })),
   );
 });
 
@@ -140,7 +139,7 @@ describe('DNSLink deployment', () => {
     expect(String(updateUrl)).toMatch(/\/dns_records\/dnslink-record$/u);
     expect(updateInit?.method).toBe('PATCH');
     expect(JSON.parse(String(updateInit?.body))).toEqual({
-              comment: 'Peerstellation release pointer; managed by GitHub Actions',
+      comment: 'Peerstellation release pointer; managed by GitHub Actions',
       content: `dnslink=/ipfs/${validCid}`,
       name: '_dnslink.ipfsuniverse.xyz',
       proxied: false,
@@ -229,9 +228,7 @@ describe('static deployment configuration', () => {
     expect(headers).not.toContain("'unsafe-inline'");
     expect(headers).not.toMatch(/(?<!wasm-)'unsafe-eval'/u);
     expect(headers).toContain('Cross-Origin-Opener-Policy: same-origin');
-    expect(headers).toContain(
-      'Cross-Origin-Embedder-Policy: require-corp',
-    );
+    expect(headers).toContain('Cross-Origin-Embedder-Policy: require-corp');
     expect(headers).toContain("frame-ancestors 'none'");
   });
 });

@@ -93,10 +93,18 @@ function reduceRecord(
       return {
         ...seen,
         source: observation.source ?? current?.source ?? 'browser',
-        ...(observation.protocols === undefined ? {} : { protocols: observation.protocols }),
-        ...(observation.agentVersion === undefined ? {} : { agentVersion: observation.agentVersion }),
-        ...(observation.protocolVersion === undefined ? {} : { protocolVersion: observation.protocolVersion }),
-        ...(observation.addressCount === undefined ? {} : { addressCount: observation.addressCount }),
+        ...(observation.protocols === undefined
+          ? {}
+          : { protocols: observation.protocols }),
+        ...(observation.agentVersion === undefined
+          ? {}
+          : { agentVersion: observation.agentVersion }),
+        ...(observation.protocolVersion === undefined
+          ? {}
+          : { protocolVersion: observation.protocolVersion }),
+        ...(observation.addressCount === undefined
+          ? {}
+          : { addressCount: observation.addressCount }),
       };
     case 'connected':
       if (
@@ -112,12 +120,22 @@ function reduceRecord(
         statusObservedAt: observation.observedAt,
         direction: observation.direction,
         transport: observation.transport,
-        ...(observation.relayPeerId === undefined ? {} : { relayPeerId: observation.relayPeerId }),
+        ...(observation.relayPeerId === undefined
+          ? {}
+          : { relayPeerId: observation.relayPeerId }),
         source: observation.source ?? current?.source ?? 'browser',
-        ...(observation.protocols === undefined ? {} : { protocols: observation.protocols }),
-        ...(observation.agentVersion === undefined ? {} : { agentVersion: observation.agentVersion }),
-        ...(observation.protocolVersion === undefined ? {} : { protocolVersion: observation.protocolVersion }),
-        ...(observation.addressCount === undefined ? {} : { addressCount: observation.addressCount }),
+        ...(observation.protocols === undefined
+          ? {}
+          : { protocols: observation.protocols }),
+        ...(observation.agentVersion === undefined
+          ? {}
+          : { agentVersion: observation.agentVersion }),
+        ...(observation.protocolVersion === undefined
+          ? {}
+          : { protocolVersion: observation.protocolVersion }),
+        ...(observation.addressCount === undefined
+          ? {}
+          : { addressCount: observation.addressCount }),
         ...(current?.status === 'connected'
           ? {}
           : { latencyMs: undefined, latencyObservedAt: undefined }),
@@ -258,6 +276,7 @@ function sameStrings(
   right: readonly string[] | undefined,
 ): boolean {
   if (left === right) return true;
-  if (left === undefined || right === undefined || left.length !== right.length) return false;
+  if (left === undefined || right === undefined || left.length !== right.length)
+    return false;
   return left.every((value, index) => value === right[index]);
 }

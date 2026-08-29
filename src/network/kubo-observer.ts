@@ -27,29 +27,43 @@ export async function probeLocalKubo(
   const origin = baseUrl.replace(/\/$/, '');
   const [idPayload, peersPayload] = await Promise.all([
     kuboJson<{ ID?: string }>(origin, 'id', signal),
-    kuboJson<{ Peers?: readonly KuboPeer[] }>(origin, 'swarm/peers?verbose=true', signal),
+    kuboJson<{ Peers?: readonly KuboPeer[] }>(
+      origin,
+      'swarm/peers?verbose=true',
+      signal,
+    ),
   ]);
   const peers = Array.isArray(peersPayload.Peers) ? peersPayload.Peers : [];
   const observedAt = Date.now();
   const observations = peers.flatMap((peer): PeerObservation[] => {
     if (typeof peer.Peer !== 'string' || peer.Peer.trim() === '') return [];
-    return [{
-      type: 'connected',
-      peerId: peer.Peer.trim(),
-      observedAt,
-      source: 'kubo',
-      direction: directionLabel(peer.Direction),
-      transport: transportLabel(peer.Addr),
-      protocols: protocolsFrom(peer),
-      agentVersion: identifyString(peer.Identify?.AgentVersion),
-      protocolVersion: identifyString(peer.Identify?.ProtocolVersion),
-      addressCount: Array.isArray(peer.Identify?.Addresses) ? Math.min(peer.Identify.Addresses.length, 128) : 1,
-    }, ...(latencyMs(peer.Latency) === undefined ? [] : [{
-      type: 'latency' as const,
-      peerId: peer.Peer.trim(),
-      observedAt,
-      latencyMs: latencyMs(peer.Latency)!,
-    }])];
+    const measuredLatency = latencyMs(peer.Latency);
+    return [
+      {
+        type: 'connected',
+        peerId: peer.Peer.trim(),
+        observedAt,
+        source: 'kubo',
+        direction: directionLabel(peer.Direction),
+        transport: transportLabel(peer.Addr),
+        protocols: protocolsFrom(peer),
+        agentVersion: identifyString(peer.Identify?.AgentVersion),
+        protocolVersion: identifyString(peer.Identify?.ProtocolVersion),
+        addressCount: Array.isArray(peer.Identify?.Addresses)
+          ? Math.min(peer.Identify.Addresses.length, 128)
+          : 1,
+      },
+      ...(measuredLatency === undefined
+        ? []
+        : [
+            {
+              type: 'latency' as const,
+              peerId: peer.Peer.trim(),
+              observedAt,
+              latencyMs: measuredLatency,
+            },
+          ]),
+    ];
   });
   return {
     localPeerId: typeof idPayload.ID === 'string' ? idPayload.ID : undefined,
@@ -74,11 +88,20 @@ interface KuboPeer {
 
 function protocolsFrom(peer: KuboPeer): readonly string[] | undefined {
   const identify = peer.Identify?.Protocols;
-  if (Array.isArray(identify)) return identify.filter((value: unknown): value is string => typeof value === 'string').slice(0, 32);
+  if (Array.isArray(identify))
+    return identify
+      .filter((value: unknown): value is string => typeof value === 'string')
+      .slice(0, 32);
   if (Array.isArray(peer.Streams)) {
     return peer.Streams.flatMap((stream: unknown) => {
       if (typeof stream === 'string') return [stream];
-      if (stream !== null && typeof stream === 'object' && 'Protocol' in stream && typeof stream.Protocol === 'string') return [stream.Protocol];
+      if (
+        stream !== null &&
+        typeof stream === 'object' &&
+        'Protocol' in stream &&
+        typeof stream.Protocol === 'string'
+      )
+        return [stream.Protocol];
       return [];
     }).slice(0, 32);
   }
@@ -86,10 +109,16 @@ function protocolsFrom(peer: KuboPeer): readonly string[] | undefined {
 }
 
 function identifyString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() !== '' ? value.slice(0, 256) : undefined;
+  return typeof value === 'string' && value.trim() !== ''
+    ? value.slice(0, 256)
+    : undefined;
 }
 
-async function kuboJson<T>(baseUrl: string, endpoint: string, signal?: AbortSignal): Promise<T> {
+async function kuboJson<T>(
+  baseUrl: string,
+  endpoint: string,
+  signal?: AbortSignal,
+): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${baseUrl}/api/v0/${endpoint}`, {
@@ -98,10 +127,16 @@ async function kuboJson<T>(baseUrl: string, endpoint: string, signal?: AbortSign
       signal: signal ?? AbortSignal.timeout(4_000),
     });
   } catch {
-    throw new KuboProbeError('cors', 'Local Kubo is unreachable or has not allowed this origin (CORS).');
+    throw new KuboProbeError(
+      'cors',
+      'Local Kubo is unreachable or has not allowed this origin (CORS).',
+    );
   }
   if (!response.ok) {
-    throw new KuboProbeError('http', `Local Kubo returned HTTP ${response.status}.`);
+    throw new KuboProbeError(
+      'http',
+      `Local Kubo returned HTTP ${response.status}.`,
+    );
   }
   try {
     return (await response.json()) as T;
@@ -128,10 +163,15 @@ function transportLabel(value: unknown): string {
 }
 
 function latencyMs(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0)
+    return value;
   if (typeof value !== 'string') return undefined;
   const match = /([0-9]+(?:\.[0-9]+)?)\s*(ms|s)?/i.exec(value);
   if (match === null) return undefined;
   const number = Number(match[1]);
-  return Number.isFinite(number) ? (match[2]?.toLowerCase() === 's' ? number * 1_000 : number) : undefined;
+  return Number.isFinite(number)
+    ? match[2]?.toLowerCase() === 's'
+      ? number * 1_000
+      : number
+    : undefined;
 }

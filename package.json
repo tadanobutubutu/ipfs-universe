@@ -10,6 +10,11 @@
     "build-wasm": "tsx scripts/build-wasm.ts",
     "build": "npm run build-wasm && vite build",
     "check": "npm run typecheck && npm run test:unit && vite build",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "quality": "biome check .",
     "test:a11y:html": "html-validate --config .htmlvalidate.json index.html public/404.html",
     "test:a11y:pa11y": "start-test 'vite --host 127.0.0.1 --port 4178' http://127.0.0.1:4178 'tsx scripts/run-pa11y.ts'",
     "test:a11y": "npm run test:a11y:html && npm run test:a11y:pa11y",
@@ -25,6 +30,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
+    "@biomejs/biome": "2.5.11",
     "@playwright/test": "1.62.1",
     "@types/node": "^24.10.0",
     "@types/pa11y": "5.3.7",
@@ -35,7 +41,7 @@
     "pa11y": "10.0.0",
     "start-server-and-test": "3.0.12",
     "tsx": "^4.20.0",
-    "typescript": "^5.3.3",
+    "typescript": "7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.0.0",
     "wrangler": "4.125.0"

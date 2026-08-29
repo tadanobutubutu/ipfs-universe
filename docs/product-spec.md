@@ -89,6 +89,7 @@
 ### Zig
 
 - 512ノードまでの位置、速度、中心引力、反発、減衰を更新する。
+- 中心線と、両端の観測記録があるリレー線の位置・輝度を計算する。
 - 固定メモリを使い、Three.jsのBufferAttributeはWASMメモリを直接参照する。
 - TypeScriptへ毎フレーム配列コピーしない。
 - `step(deltaSeconds, activeCount, motionScale)` を公開する。
@@ -102,7 +103,15 @@
 ### TypeScript
 
 - DOM、Heliaイベント正規化、状態管理、レンダラー連携、WASMロード、配信処理を担当する。
+- TypeScript 7系を使い、整形・Lint・import整理はBiomeへ統一する。ESLintは導入しない。
 - リポジトリが所有する`.js`と`.jsx`は0件にする。依存物とビルド出力は追跡しない。
+
+### Three.jsとWASMの境界
+
+- Zig WASMはノード位置・速度・反発・中心/リレー線分の位置と輝度を計算し、Three.jsの`BufferAttribute`へ線形メモリを直接公開する。
+- Rust WASMはピア集計と遅延統計を計算する。
+- Three.jsのWebGLコンテキスト、シーン/マテリアル生成、GPUリソース寿命、DOMイベント、アクセシブルなテキストUIはブラウザAPIの所有範囲であり、TypeScriptが担当する。これらをRust/Zigへ移すには別のWebGLバインディングとJSホストが必要で、Three.jsそのものをWASMへコンパイルすることはできない。
+- `three-ui` 1.1.1はReact 16向けの古い2Dコンポーネント集でThree.js UIではない。`@darrylondil/react-three-ui` 0.2.0はReact Three Fiber専用の別ライブラリであり、現行のDOMアクセシビリティと初期性能を壊さないため、全画面置換には使わない。
 
 ## 8. 安全性
 

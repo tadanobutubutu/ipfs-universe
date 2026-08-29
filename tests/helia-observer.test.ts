@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  normalizeConnections,
-  startHeliaObserver,
   type HeliaNetworkAdapter,
+  normalizeConnections,
   type ObservableConnection,
   type ObservablePeer,
+  startHeliaObserver,
 } from '../src/network/helia-observer';
 
 const peer = (value: string): ObservablePeer => ({
@@ -231,7 +231,9 @@ describe('Helia observer', () => {
     await vi.waitFor(() => expect(adapter.ping).toHaveBeenCalledTimes(2));
     releases.shift()?.();
     await vi.waitFor(() => expect(adapter.ping).toHaveBeenCalledTimes(3));
-    releases.splice(0).forEach((release) => release());
+    for (const release of releases.splice(0)) {
+      release();
+    }
 
     expect(maximum).toBe(2);
     await observer.stop();

@@ -1,13 +1,12 @@
 import { readFile } from 'node:fs/promises';
 
 import { describe, expect, it } from 'vitest';
-
+import type { PeerRecord } from '../src/network/peer-types';
 import {
   loadAnalyticsWasm,
   loadPhysicsWasm,
   type WasmFetcher,
 } from '../src/wasm/load-wasm';
-import type { PeerRecord } from '../src/network/peer-types';
 
 function bytesFetcher(
   bytes: Uint8Array<ArrayBuffer>,
@@ -39,6 +38,30 @@ describe('typed WASM loaders', () => {
     expect(positions).toHaveLength(6);
     expect(positions.buffer).toBe(initialBuffer);
     expect([...positions].every(Number.isFinite)).toBe(true);
+  });
+
+  it('exposes the Zig edge-layout buffer without a per-frame copy', async () => {
+    const bytes = await readFile('public/physics.wasm');
+    const physics = await loadPhysicsWasm(
+      '/physics.wasm',
+      bytesFetcher(Uint8Array.from(bytes), 'application/wasm'),
+    );
+
+    physics.initialize(2);
+    physics.seedNode(0, 11, 12, 0);
+    physics.seedNode(1, 22, 36, 3);
+    physics.setPeerMetadata(0, 'connected', 20, -1);
+    physics.setPeerMetadata(1, 'connected', 400, 0);
+
+    const edgeCount = physics.layoutEdges(2);
+    expect(edgeCount).toBe(3);
+    const edgePositions = physics.edgePositions(edgeCount);
+    const edgeColors = physics.edgeColors(edgeCount);
+    expect(edgePositions.length).toBe(edgeCount * 2 * 3);
+    expect(edgeColors.length).toBe(edgePositions.length);
+    expect(edgePositions.buffer).toBe(edgeColors.buffer);
+    expect([...edgePositions].every(Number.isFinite)).toBe(true);
+    expect([...edgeColors].every(Number.isFinite)).toBe(true);
   });
 
   it('maps typed peer records into Rust analytics', async () => {

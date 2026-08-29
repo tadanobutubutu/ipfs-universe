@@ -2,13 +2,29 @@ const std = @import("std");
 
 const max_node_count: usize = 512;
 const vector_width: usize = 3;
+const edge_width: usize = vector_width * 2;
+const max_edge_count: usize = max_node_count * 2;
+const edge_component_count: usize = max_edge_count * edge_width;
+const relay_edge_seen_count: usize = max_node_count * max_node_count;
 const boundary_radius: f32 = 52.0;
 const repulsion_radius: f32 = 7.5;
+const connected_status: i32 = 1;
+const no_relay: i32 = -1;
+const edge_red: f32 = 0.6235294;
+const edge_green: f32 = 1.0;
+const edge_blue: f32 = 0.8901961;
 
 var positions: [max_node_count * vector_width]f32 = [_]f32{0} ** (max_node_count * vector_width);
 var anchors: [max_node_count * vector_width]f32 = [_]f32{0} ** (max_node_count * vector_width);
 var velocities: [max_node_count * vector_width]f32 = [_]f32{0} ** (max_node_count * vector_width);
+var peer_status: [max_node_count]i32 = [_]i32{0} ** max_node_count;
+var peer_latency: [max_node_count]f32 = [_]f32{-1.0} ** max_node_count;
+var peer_relay_index: [max_node_count]i32 = [_]i32{no_relay} ** max_node_count;
+var edge_positions: [edge_component_count]f32 = [_]f32{0} ** edge_component_count;
+var edge_colors: [edge_component_count]f32 = [_]f32{0} ** edge_component_count;
+var relay_edges_seen: [relay_edge_seen_count]bool = [_]bool{false} ** relay_edge_seen_count;
 var active_count: usize = 0;
+var rendered_edge_count: usize = 0;
 
 export fn max_nodes() i32 {
     return @intCast(max_node_count);
@@ -19,6 +35,13 @@ export fn init_system(requested_count: i32) void {
     @memset(positions[0..], 0);
     @memset(anchors[0..], 0);
     @memset(velocities[0..], 0);
+    @memset(peer_status[0..], 0);
+    @memset(peer_latency[0..], -1.0);
+    @memset(peer_relay_index[0..], no_relay);
+    @memset(edge_positions[0..], 0);
+    @memset(edge_colors[0..], 0);
+    @memset(relay_edges_seen[0..], false);
+    rendered_edge_count = 0;
 }
 
 export fn seed_node(requested_index: i32, requested_seed: i32, requested_radius: f32, requested_sector: i32) void {
@@ -113,6 +136,125 @@ export fn step(delta_seconds: f32, requested_count: i32, motion_scale: f32) void
 
 export fn positions_ptr() [*]f32 {
     return positions[0..].ptr;
+}
+
+/// Store the small amount of peer metadata needed by the edge-layout kernel.
+/// TypeScript owns identity and text; this module owns the numeric line data.
+export fn set_peer_metadata(
+    requested_index: i32,
+    status: i32,
+    latency_ms: f32,
+    requested_relay_index: i32,
+) void {
+    if (requested_index < 0) return;
+    const index: usize = @intCast(requested_index);
+    if (index >= active_count or index >= max_node_count) return;
+
+    peer_status[index] = status;
+    peer_latency[index] = if (std.math.isFinite(latency_ms) and latency_ms >= 0.0)
+        latency_ms
+    else
+        -1.0;
+    peer_relay_index[index] = if (requested_relay_index >= 0 and requested_relay_index < @as(i32, @intCast(active_count)))
+        requested_relay_index
+    else
+        no_relay;
+}
+
+/// Build all evidence-backed line segments from the current WASM positions.
+/// The first endpoint of a center edge is the local browser node at (0,0,0).
+/// Relay edges are emitted once, only when both endpoint records are present.
+export fn layout_edges(requested_count: i32) void {
+    const count = @min(active_count, clampedCount(requested_count));
+    rendered_edge_count = 0;
+    @memset(relay_edges_seen[0..], false);
+
+    var index: usize = 0;
+    while (index < count) : (index += 1) {
+        if (peer_status[index] != connected_status) continue;
+        const offset = index * vector_width;
+        write_edge(
+            0.0,
+            0.0,
+            0.0,
+            positions[offset],
+            positions[offset + 1],
+            positions[offset + 2],
+            edge_brightness(peer_latency[index]),
+        );
+    }
+
+    var target: usize = 0;
+    while (target < count) : (target += 1) {
+        if (peer_status[target] != connected_status) continue;
+        const relay = peer_relay_index[target];
+        if (relay < 0) continue;
+        const relay_index: usize = @intCast(relay);
+        if (relay_index >= count or relay_index == target) continue;
+        const first = @min(relay_index, target);
+        const second = @max(relay_index, target);
+        const seen_index = first * max_node_count + second;
+        if (relay_edges_seen[seen_index]) continue;
+        relay_edges_seen[seen_index] = true;
+
+        const relay_offset = relay_index * vector_width;
+        const target_offset = target * vector_width;
+        write_edge(
+            positions[relay_offset],
+            positions[relay_offset + 1],
+            positions[relay_offset + 2],
+            positions[target_offset],
+            positions[target_offset + 1],
+            positions[target_offset + 2],
+            @min(0.72, edge_brightness(peer_latency[target])),
+        );
+    }
+}
+
+export fn edge_count() i32 {
+    return @intCast(rendered_edge_count);
+}
+
+export fn edge_positions_ptr() [*]f32 {
+    return edge_positions[0..].ptr;
+}
+
+export fn edge_colors_ptr() [*]f32 {
+    return edge_colors[0..].ptr;
+}
+
+fn write_edge(
+    start_x: f32,
+    start_y: f32,
+    start_z: f32,
+    end_x: f32,
+    end_y: f32,
+    end_z: f32,
+    brightness: f32,
+) void {
+    if (rendered_edge_count >= max_edge_count) return;
+    const offset = rendered_edge_count * edge_width;
+    edge_positions[offset] = start_x;
+    edge_positions[offset + 1] = start_y;
+    edge_positions[offset + 2] = start_z;
+    edge_positions[offset + 3] = end_x;
+    edge_positions[offset + 4] = end_y;
+    edge_positions[offset + 5] = end_z;
+
+    const safe_brightness = std.math.clamp(brightness, 0.0, 1.5);
+    edge_colors[offset] = edge_red * safe_brightness;
+    edge_colors[offset + 1] = edge_green * safe_brightness;
+    edge_colors[offset + 2] = edge_blue * safe_brightness;
+    edge_colors[offset + 3] = edge_red * safe_brightness;
+    edge_colors[offset + 4] = edge_green * safe_brightness;
+    edge_colors[offset + 5] = edge_blue * safe_brightness;
+    rendered_edge_count += 1;
+}
+
+fn edge_brightness(latency_ms: f32) f32 {
+    if (!std.math.isFinite(latency_ms) or latency_ms < 0.0) return 0.42;
+    const normalized = std.math.clamp(latency_ms, 0.0, 800.0) / 800.0;
+    return 1.15 - normalized * 0.57;
 }
 
 fn clampedCount(requested_count: i32) usize {

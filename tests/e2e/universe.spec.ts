@@ -1,12 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
-const ACCESSIBILITY_TAGS = [
-  'wcag2a',
-  'wcag2aa',
-  'wcag21aa',
-  'wcag22aa',
-];
+const ACCESSIBILITY_TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'];
 
 async function expectNoAutomatedAccessibilityViolations(
   page: Page,
@@ -36,9 +31,16 @@ test('shows the 3D observatory immediately with semantic structure', async ({
     /\bscene-description\b/u,
   );
   await expect(page.locator('#node-tooltip')).toHaveAttribute('role', 'status');
-  await expect(page.locator('#node-tooltip')).toHaveAttribute('aria-live', 'polite');
+  await expect(page.locator('#node-tooltip')).toHaveAttribute(
+    'aria-live',
+    'polite',
+  );
   await expect(page.locator('#kubo-probe')).toBeVisible();
-  expect(await page.locator('#kubo-probe').evaluate((element) => element.closest('dialog'))).toBeNull();
+  expect(
+    await page
+      .locator('#kubo-probe')
+      .evaluate((element) => element.closest('dialog')),
+  ).toBeNull();
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
     timeout: 3_000,
   });
@@ -67,9 +69,13 @@ test('supports keyboard navigation, motion pause, and peer details', async ({
 
   const canvas = page.locator('#universe-canvas');
   await canvas.focus();
-  const distanceBefore = Number(await canvas.getAttribute('data-camera-distance'));
+  const distanceBefore = Number(
+    await canvas.getAttribute('data-camera-distance'),
+  );
   await page.keyboard.press('+');
-  const distanceAfter = Number(await canvas.getAttribute('data-camera-distance'));
+  const distanceAfter = Number(
+    await canvas.getAttribute('data-camera-distance'),
+  );
   expect(distanceAfter).toBeLessThan(distanceBefore);
 
   await page.getByRole('button', { name: /peer explorer|peers/i }).click();
@@ -79,19 +85,25 @@ test('supports keyboard navigation, motion pause, and peer details', async ({
   await expect(dialog).toBeHidden();
 });
 
-test('honors reduced motion before the first rendered frame', async ({ page }) => {
+test('honors reduced motion before the first rendered frame', async ({
+  page,
+}) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
 
   await expect(page.locator('html')).toHaveAttribute('data-motion', 'paused');
-  await expect(page.getByRole('button', { name: /resume motion/i })).toHaveAttribute(
-    'aria-pressed',
-    'true',
+  await expect(
+    page.getByRole('button', { name: /resume motion/i }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#universe-canvas')).toHaveAttribute(
+    'data-pulse',
+    'static',
   );
-  await expect(page.locator('#universe-canvas')).toHaveAttribute('data-pulse', 'static');
 });
 
-test('reflows at 320 CSS pixels and 200 percent text size', async ({ page }) => {
+test('reflows at 320 CSS pixels and 200 percent text size', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 320, height: 780 });
   await page.goto('/');
   await page.evaluate(() => {
@@ -124,17 +136,17 @@ test('reflows at 320 CSS pixels and 200 percent text size', async ({ page }) => 
     ),
   ).toEqual([]);
 
-  const firstViewport = await page.locator(
-    '.scene-legend, .metric-deck',
-  ).evaluateAll((elements) =>
-    elements
-      .filter((element) => element.scrollWidth > element.clientWidth + 1)
-      .map((element) => ({
-        selector: element.className,
-        clientWidth: element.clientWidth,
-        scrollWidth: element.scrollWidth,
-      })),
-  );
+  const firstViewport = await page
+    .locator('.scene-legend, .metric-deck')
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => ({
+          selector: element.className,
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+        })),
+    );
   expect(firstViewport).toEqual([]);
   const canvasBounds = await page.locator('#universe-canvas').boundingBox();
   expect(canvasBounds).not.toBeNull();
@@ -148,7 +160,9 @@ test('reflows at 320 CSS pixels and 200 percent text size', async ({ page }) => 
   await page.getByRole('button', { name: /peer explorer|peers/i }).click();
   const dialog = page.getByRole('dialog', { name: /peer explorer/i });
   await expect(dialog).toBeVisible();
-  const closeButton = page.getByRole('button', { name: /close peer explorer/i });
+  const closeButton = page.getByRole('button', {
+    name: /close peer explorer/i,
+  });
   const closeBounds = await closeButton.boundingBox();
   expect(closeBounds).not.toBeNull();
   if (closeBounds === null) {
@@ -156,12 +170,12 @@ test('reflows at 320 CSS pixels and 200 percent text size', async ({ page }) => 
   }
   expect(closeBounds.x).toBeGreaterThanOrEqual(0);
   expect(closeBounds.x + closeBounds.width).toBeLessThanOrEqual(320);
-  const surfaceOverflow = await dialog.locator('.peer-dialog__surface').evaluate(
-    (element) => ({
+  const surfaceOverflow = await dialog
+    .locator('.peer-dialog__surface')
+    .evaluate((element) => ({
       clientWidth: element.clientWidth,
       scrollWidth: element.scrollWidth,
-    }),
-  );
+    }));
   expect(surfaceOverflow.scrollWidth).toBeLessThanOrEqual(
     surfaceOverflow.clientWidth,
   );
@@ -215,8 +229,10 @@ test('keeps every observatory layer separated across the responsive matrix', asy
       });
       const overlaps = rectangles.flatMap((rectangle, index) =>
         rectangles.slice(index + 1).flatMap((other) => {
-          const horizontal = rectangle.left < other.right && other.left < rectangle.right;
-          const vertical = rectangle.top < other.bottom && other.top < rectangle.bottom;
+          const horizontal =
+            rectangle.left < other.right && other.left < rectangle.right;
+          const vertical =
+            rectangle.top < other.bottom && other.top < rectangle.bottom;
           return horizontal && vertical
             ? [`${rectangle.selector} overlaps ${other.selector}`]
             : [];
@@ -224,7 +240,10 @@ test('keeps every observatory layer separated across the responsive matrix', asy
       );
       return { rectangles, overlaps };
     });
-    expect(result.overlaps, `${viewport.width}x${viewport.height} ${viewport.fontSize}`).toEqual([]);
+    expect(
+      result.overlaps,
+      `${viewport.width}x${viewport.height} ${viewport.fontSize}`,
+    ).toEqual([]);
   }
 });
 
@@ -355,9 +374,13 @@ test('keeps text access visible when WebGL initialization fails', async ({
     'data-scene',
     'unavailable',
   );
-  await expect(page.getByRole('region', { name: /3D view unavailable/i })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: /3D view unavailable/i }),
+  ).toBeVisible();
   await page.getByRole('button', { name: /open peer explorer/i }).click();
-  await expect(page.getByRole('dialog', { name: /peer explorer/i })).toBeVisible();
+  await expect(
+    page.getByRole('dialog', { name: /peer explorer/i }),
+  ).toBeVisible();
   await expectNoAutomatedAccessibilityViolations(page);
 });
 
@@ -387,13 +410,17 @@ test('has no automated WCAG A or AA violations in the initial state', async ({
   await expectNoAutomatedAccessibilityViolations(page);
 });
 
-test('keeps the live scene inside the fixed draw-call budget', async ({ page }) => {
+test('keeps the live scene inside the fixed draw-call budget', async ({
+  page,
+}) => {
   await page.goto('/');
   const canvas = page.locator('#universe-canvas');
   await expect(canvas).toHaveAttribute('data-draw-calls', /\d+/u, {
     timeout: 8_000,
   });
-  const initialObjects = Number(await canvas.getAttribute('data-scene-objects'));
+  const initialObjects = Number(
+    await canvas.getAttribute('data-scene-objects'),
+  );
   const drawCalls = Number(await canvas.getAttribute('data-draw-calls'));
   await page.waitForTimeout(3_000);
   const laterObjects = Number(await canvas.getAttribute('data-scene-objects'));
@@ -402,7 +429,9 @@ test('keeps the live scene inside the fixed draw-call budget', async ({ page }) 
   expect(laterObjects).toBe(initialObjects);
 });
 
-test('draws relay edges only when both relay endpoints are observed', async ({ page }) => {
+test('draws relay edges only when both relay endpoints are observed', async ({
+  page,
+}) => {
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
   const result = await page.evaluate(() => {
@@ -416,10 +445,13 @@ test('draws relay edges only when both relay endpoints are observed', async ({ p
       transport: string;
       relayPeerId?: string;
     };
-    const setPeers = (window as Window & {
-      __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
-    }).__peerstellationSetPeers;
-    if (setPeers === undefined) throw new Error('development relay fixture is unavailable');
+    const setPeers = (
+      window as Window & {
+        __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
+      }
+    ).__peerstellationSetPeers;
+    if (setPeers === undefined)
+      throw new Error('development relay fixture is unavailable');
     const relay: FixturePeer = {
       peerId: '12D3KooWRelayEvidence',
       status: 'connected',
@@ -440,15 +472,21 @@ test('draws relay edges only when both relay endpoints are observed', async ({ p
       relayPeerId: relay.peerId,
     };
     setPeers([relay, target]);
-    const withRelay = document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset.edgeSegments;
+    const withRelay =
+      document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset
+        .edgeSegments;
     setPeers([target]);
-    const withoutRelay = document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset.edgeSegments;
+    const withoutRelay =
+      document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset
+        .edgeSegments;
     return { withRelay, withoutRelay };
   });
   expect(result).toEqual({ withRelay: '3', withoutRelay: '1' });
 });
 
-test('keeps the measured latency-to-radius signal visible in the live renderer', async ({ page }) => {
+test('keeps the measured latency-to-radius signal visible in the live renderer', async ({
+  page,
+}) => {
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
   const result = await page.evaluate(() => {
@@ -462,10 +500,13 @@ test('keeps the measured latency-to-radius signal visible in the live renderer',
       transport: string;
       latencyMs: number;
     };
-    const setPeers = (window as Window & {
-      __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
-    }).__peerstellationSetPeers;
-    if (setPeers === undefined) throw new Error('development latency fixture is unavailable');
+    const setPeers = (
+      window as Window & {
+        __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
+      }
+    ).__peerstellationSetPeers;
+    if (setPeers === undefined)
+      throw new Error('development latency fixture is unavailable');
     setPeers([
       {
         peerId: '12D3KooWFastLatency',
@@ -488,7 +529,10 @@ test('keeps the measured latency-to-radius signal visible in the live renderer',
         latencyMs: 1_000,
       },
     ]);
-    const radii = (document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset.peerRadii ?? '')
+    const radii = (
+      document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset
+        .peerRadii ?? ''
+    )
       .split(',')
       .map(Number);
     return { radii, ratio: (radii[1] ?? 0) / (radii[0] ?? 1) };
@@ -503,7 +547,9 @@ test('starts a real Helia browser identity without a simulation fallback', async
 }) => {
   await page.goto('/');
   const identity = page.locator('#local-peer-id');
-  await expect(identity).not.toHaveText('Identity pending', { timeout: 25_000 });
+  await expect(identity).not.toHaveText('Identity pending', {
+    timeout: 25_000,
+  });
   await expect(page.locator('.node-status__beacon')).toHaveAttribute(
     'data-tone',
     'online',

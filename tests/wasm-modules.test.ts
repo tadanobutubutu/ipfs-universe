@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-type WasmFunction = (...arguments_: number[]) => number | void;
+type WasmFunction = (...arguments_: number[]) => number | undefined;
 
 interface LoadedWasm {
   readonly instance: WebAssembly.Instance;
@@ -46,6 +46,11 @@ describe('native WebAssembly modules', () => {
       'step',
       'positions_ptr',
       'max_nodes',
+      'set_peer_metadata',
+      'layout_edges',
+      'edge_count',
+      'edge_positions_ptr',
+      'edge_colors_ptr',
     ]) {
       exportedFunction(physics.instance, name);
     }
@@ -128,9 +133,7 @@ describe('native WebAssembly modules', () => {
   });
 
   it('clamps Zig work to its fixed capacity', () => {
-    const maximum = Number(
-      exportedFunction(physics.instance, 'max_nodes')(),
-    );
+    const maximum = Number(exportedFunction(physics.instance, 'max_nodes')());
     const initialize = exportedFunction(physics.instance, 'init_system');
     const step = exportedFunction(physics.instance, 'step');
 
@@ -139,6 +142,46 @@ describe('native WebAssembly modules', () => {
       initialize(50_000);
       step(10, 50_000, 1);
     }).not.toThrow();
+  });
+
+  it('computes center and relay edges in the Zig module', () => {
+    const initialize = exportedFunction(physics.instance, 'init_system');
+    const seedNode = exportedFunction(physics.instance, 'seed_node');
+    const setPeerMetadata = exportedFunction(
+      physics.instance,
+      'set_peer_metadata',
+    );
+    const layoutEdges = exportedFunction(physics.instance, 'layout_edges');
+    const edgeCount = exportedFunction(physics.instance, 'edge_count');
+    const edgePositionsPointer = exportedFunction(
+      physics.instance,
+      'edge_positions_ptr',
+    );
+    const edgeColorsPointer = exportedFunction(
+      physics.instance,
+      'edge_colors_ptr',
+    );
+
+    initialize(2);
+    seedNode(0, 11, 12, 0);
+    seedNode(1, 22, 36, 3);
+    setPeerMetadata(0, 1, 20, -1);
+    setPeerMetadata(1, 1, 400, 0);
+    layoutEdges(2);
+
+    expect(edgeCount()).toBe(3);
+    const positions = new Float32Array(
+      physics.memory.buffer,
+      Number(edgePositionsPointer()),
+      3 * 2 * 3,
+    );
+    const colors = new Float32Array(
+      physics.memory.buffer,
+      Number(edgeColorsPointer()),
+      3 * 2 * 3,
+    );
+    expect([...positions].every(Number.isFinite)).toBe(true);
+    expect([...colors].every(Number.isFinite)).toBe(true);
   });
 
   it('uses only live peer pings for Rust latency and coverage analytics', () => {
@@ -156,13 +199,7 @@ describe('native WebAssembly modules', () => {
       Number(inputPointer()),
       5 * stride,
     );
-    input.set([
-      1, 10,
-      1, 20,
-      1, 30,
-      0, 40,
-      2, 50,
-    ]);
+    input.set([1, 10, 1, 20, 1, 30, 0, 40, 2, 50]);
 
     analyze(5);
     const result = [
@@ -183,9 +220,7 @@ describe('native WebAssembly modules', () => {
     const resultLength = Number(
       exportedFunction(analytics.instance, 'result_len')(),
     );
-    const maximum = Number(
-      exportedFunction(analytics.instance, 'max_nodes')(),
-    );
+    const maximum = Number(exportedFunction(analytics.instance, 'max_nodes')());
 
     analyze(0);
     expect([

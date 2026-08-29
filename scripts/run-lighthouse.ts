@@ -25,7 +25,9 @@ const lighthouseBin = join(
   '.bin',
   process.platform === 'win32' ? 'lighthouse.cmd' : 'lighthouse',
 );
-const temporaryRoot = await mkdtemp(join(tmpdir(), 'peerstellation-lighthouse-'));
+const temporaryRoot = await mkdtemp(
+  join(tmpdir(), 'peerstellation-lighthouse-'),
+);
 const sharedArgs = [
   '--only-categories=performance,accessibility,best-practices,seo,agentic-browsing',
   '--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage',
@@ -33,7 +35,10 @@ const sharedArgs = [
   '--quiet',
 ];
 
-async function audit(label: string, preset: 'mobile' | 'desktop'): Promise<void> {
+async function audit(
+  label: string,
+  preset: 'mobile' | 'desktop',
+): Promise<void> {
   const reportPath = join(temporaryRoot, `${preset}.json`);
   await execFileAsync(lighthouseBin, [
     target,
@@ -41,7 +46,9 @@ async function audit(label: string, preset: 'mobile' | 'desktop'): Promise<void>
     ...sharedArgs,
     `--output-path=${reportPath}`,
   ]);
-  const report = JSON.parse(await readFile(reportPath, 'utf8')) as LighthouseReport;
+  const report = JSON.parse(
+    await readFile(reportPath, 'utf8'),
+  ) as LighthouseReport;
   const scores = Object.fromEntries(
     Object.entries(report.categories ?? {}).map(([name, category]) => [
       name,

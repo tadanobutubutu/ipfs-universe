@@ -40,7 +40,8 @@ export default defineConfig({
         // Keep the WebGL renderer out of the first shell chunk. The scene is
         // imported after the first paint, so this cacheable vendor asset can
         // be fetched in parallel with the initial shell.
-        manualChunks: (id) => id.includes('/node_modules/three/') ? 'three-vendor' : null,
+        manualChunks: (id) =>
+          id.includes('/node_modules/three/') ? 'three-vendor' : null,
       },
     },
   },

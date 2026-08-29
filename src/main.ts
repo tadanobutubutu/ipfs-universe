@@ -6,20 +6,24 @@ import {
   getPeerCount,
   savePeers,
 } from './db/peer-history';
+import type { HeliaObserver } from './network/helia-observer';
+import { KuboProbeError, probeLocalKubo } from './network/kubo-observer';
 import {
   emptyPeerState,
   reducePeerEvent,
   toPersistedPeer,
 } from './network/peer-reducer';
-import type { HeliaObserver } from './network/helia-observer';
-import type { PeerObservation, PeerRecord, PeerState } from './network/peer-types';
-import { KuboProbeError, probeLocalKubo } from './network/kubo-observer';
+import type {
+  PeerObservation,
+  PeerRecord,
+  PeerState,
+} from './network/peer-types';
 import type { UniverseScene } from './scene/universe';
 import { AppShell } from './ui/app-shell';
 import {
+  type AnalyticsWasm,
   loadAnalyticsWasm,
   loadPhysicsWasm,
-  type AnalyticsWasm,
 } from './wasm/load-wasm';
 
 const UI_BATCH_INTERVAL_MS = 100;
@@ -125,9 +129,11 @@ async function startScene(): Promise<void> {
     // relay fixture into the real renderer. It is tree-shaken from production
     // and never exposes network state in the deployed app.
     if (import.meta.env.DEV) {
-      (window as Window & {
-        __peerstellationSetPeers?: (peers: readonly PeerRecord[]) => void;
-      }).__peerstellationSetPeers = (peers) => universe?.setPeers(peers);
+      (
+        window as Window & {
+          __peerstellationSetPeers?: (peers: readonly PeerRecord[]) => void;
+        }
+      ).__peerstellationSetPeers = (peers) => universe?.setPeers(peers);
     }
   } catch {
     shell.markSceneUnavailable();
@@ -156,27 +162,35 @@ async function startDeferredSystems(): Promise<void> {
 }
 
 async function readLocalKubo(): Promise<void> {
-  shell.setKuboStatus('Requesting /id and /swarm/peers from 127.0.0.1:5001…', true);
+  shell.setKuboStatus(
+    'Requesting /id and /swarm/peers from 127.0.0.1:5001…',
+    true,
+  );
   try {
     const result = await probeLocalKubo();
-    for (const observation of result.observations) acceptObservation(observation);
+    for (const observation of result.observations)
+      acceptObservation(observation);
     shell.setKuboStatus(
       `${result.peerCount} peers read from local Kubo. Browser Helia remains a separate node.`,
     );
     scheduleUiUpdate();
   } catch (error) {
-    const message = error instanceof KuboProbeError && error.code === 'cors'
-      ? 'Local Kubo blocked this origin. Add only this local origin to API.HTTPHeaders, then restart IPFS Desktop.'
-      : error instanceof Error ? error.message : 'Local Kubo could not be read.';
+    const message =
+      error instanceof KuboProbeError && error.code === 'cors'
+        ? 'Local Kubo blocked this origin. Add only this local origin to API.HTTPHeaders, then restart IPFS Desktop.'
+        : error instanceof Error
+          ? error.message
+          : 'Local Kubo could not be read.';
     shell.setKuboStatus(message);
   }
 }
 
 async function startNetworkObserverWhenIdle(): Promise<void> {
   await new Promise<void>((resolve) => {
-    const delay = window.innerWidth < 640
-      ? MOBILE_NETWORK_BOOT_DELAY_MS
-      : NETWORK_BOOT_DELAY_MS;
+    const delay =
+      window.innerWidth < 640
+        ? MOBILE_NETWORK_BOOT_DELAY_MS
+        : NETWORK_BOOT_DELAY_MS;
     globalThis.setTimeout(resolve, delay);
   });
   if (appDisposed || networkGeneration !== 0) return;
@@ -221,10 +235,7 @@ async function startNetworkObserver(): Promise<void> {
     scheduleUiUpdate();
   } catch {
     if (generation === networkGeneration) {
-      shell.setNetworkState(
-        'error',
-        'Browser node could not start',
-      );
+      shell.setNetworkState('error', 'Browser node could not start');
     }
   }
 }

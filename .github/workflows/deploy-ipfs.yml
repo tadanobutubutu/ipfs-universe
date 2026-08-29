@@ -39,6 +39,9 @@ jobs:
       - name: Verify types, units, WASM, and production build
         run: npm run check
 
+      - name: Verify Biome formatting and lint
+        run: npm run quality
+
       - name: Install the Playwright browser
         run: npx playwright install --with-deps chromium
 

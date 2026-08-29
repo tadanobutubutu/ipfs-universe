@@ -17,9 +17,9 @@ describe('repository policy', () => {
   });
 
   it('contains no repository-owned JavaScript', () => {
-    expect(
-      trackedFiles.filter((path) => /\.(?:js|jsx)$/u.test(path)),
-    ).toEqual([]);
+    expect(trackedFiles.filter((path) => /\.(?:js|jsx)$/u.test(path))).toEqual(
+      [],
+    );
   });
 
   it('contains no retired local-app artifacts', () => {

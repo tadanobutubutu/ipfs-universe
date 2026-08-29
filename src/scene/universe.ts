@@ -14,7 +14,7 @@ import {
   Line,
   LineBasicMaterial,
   LineSegments,
-  Material,
+  type Material,
   MathUtils,
   Matrix4,
   Mesh,
@@ -25,7 +25,7 @@ import {
   Scene,
   SphereGeometry,
   SRGBColorSpace,
-  Texture,
+  type Texture,
   TorusGeometry,
   Vector3,
   WebGLRenderer,
@@ -43,7 +43,9 @@ export interface UniverseScene {
   readonly rendererName: string;
   attachPhysics(physics: PhysicsWasm): void;
   setPeers(peers: readonly PeerRecord[]): void;
-  onNodeInteraction(listener: (interaction: NodeInteraction) => void): () => void;
+  onNodeInteraction(
+    listener: (interaction: NodeInteraction) => void,
+  ): () => void;
   setMotionPaused(paused: boolean): void;
   start(): void;
   dispose(): void;
@@ -70,16 +72,17 @@ class ThreeUniverseScene implements UniverseScene {
   readonly #lookTarget = new Vector3();
   readonly #core = new Group();
   readonly #dust: Points;
-  readonly #pulseRing: Mesh<
-    TorusGeometry,
-    MeshBasicMaterial
-  >;
+  readonly #pulseRing: Mesh<TorusGeometry, MeshBasicMaterial>;
   readonly #peerMesh: InstancedMesh;
   readonly #edgeGeometry: BufferGeometry;
   // Reserve one center edge and one evidence-backed relay edge per visible
   // peer. Unknown remote topology is intentionally never inferred.
-  readonly #edgePositions = new Float32Array(SCENE_NODE_LIMIT * 12);
-  readonly #edgeColors = new Float32Array(SCENE_NODE_LIMIT * 12);
+  #edgePositions: Float32Array<ArrayBufferLike> = new Float32Array(
+    SCENE_NODE_LIMIT * 12,
+  );
+  #edgeColors: Float32Array<ArrayBufferLike> = new Float32Array(
+    SCENE_NODE_LIMIT * 12,
+  );
   readonly #edgeColor = new Color();
   readonly #matrix = new Matrix4();
   readonly #resizeObserver: ResizeObserver;
@@ -113,7 +116,9 @@ class ThreeUniverseScene implements UniverseScene {
   #shaderWarmupDone = false;
   readonly #pickWorld = new Vector3();
   readonly #pickScreen = new Vector3();
-  readonly #interactionListeners = new Set<(interaction: NodeInteraction) => void>();
+  readonly #interactionListeners = new Set<
+    (interaction: NodeInteraction) => void
+  >();
   #hoveredIndex?: number;
   #selectedIndex?: number;
   #keyboardIndex?: number;
@@ -174,15 +179,11 @@ class ThreeUniverseScene implements UniverseScene {
     this.#edgeGeometry = new BufferGeometry();
     this.#edgeGeometry.setAttribute(
       'position',
-      new BufferAttribute(this.#edgePositions, 3).setUsage(
-        DynamicDrawUsage,
-      ),
+      new BufferAttribute(this.#edgePositions, 3).setUsage(DynamicDrawUsage),
     );
     this.#edgeGeometry.setAttribute(
       'color',
-      new BufferAttribute(this.#edgeColors, 3).setUsage(
-        DynamicDrawUsage,
-      ),
+      new BufferAttribute(this.#edgeColors, 3).setUsage(DynamicDrawUsage),
     );
     this.#edgeGeometry.setDrawRange(0, 0);
     const edgeMaterial = new LineBasicMaterial({
@@ -194,10 +195,7 @@ class ThreeUniverseScene implements UniverseScene {
     });
     edgeMaterial.toneMapped = false;
     edgeMaterial.fog = false;
-    const edges = new LineSegments(
-      this.#edgeGeometry,
-      edgeMaterial,
-    );
+    const edges = new LineSegments(this.#edgeGeometry, edgeMaterial);
     this.#scene.add(edges);
 
     this.#resizeObserver = new ResizeObserver(() => this.#resize());
@@ -217,6 +215,19 @@ class ThreeUniverseScene implements UniverseScene {
 
   attachPhysics(physics: PhysicsWasm): void {
     this.#physics = physics;
+    // Bind Three.js attributes directly to the Zig WASM linear memory. The
+    // renderer still owns WebGL resources, while all per-frame line geometry
+    // is produced by the numeric kernel without a JS-side copy.
+    this.#edgePositions = physics.edgePositions(physics.maxEdges);
+    this.#edgeColors = physics.edgeColors(physics.maxEdges);
+    this.#edgeGeometry.setAttribute(
+      'position',
+      new BufferAttribute(this.#edgePositions, 3).setUsage(DynamicDrawUsage),
+    );
+    this.#edgeGeometry.setAttribute(
+      'color',
+      new BufferAttribute(this.#edgeColors, 3).setUsage(DynamicDrawUsage),
+    );
     this.#seedPhysics();
     if (this.#motionPaused) {
       this.#renderStaticFrame();
@@ -242,20 +253,31 @@ class ThreeUniverseScene implements UniverseScene {
     );
     const connectionChanged =
       connectedPeerIds.size !== this.#connectedPeerIds.size ||
-      [...connectedPeerIds].some((peerId) => !this.#connectedPeerIds.has(peerId));
+      [...connectedPeerIds].some(
+        (peerId) => !this.#connectedPeerIds.has(peerId),
+      );
     if (connectionChanged) {
       this.#pulseUntil = performance.now() + 900;
     }
     this.#connectedPeerIds = connectedPeerIds;
 
     this.#peers = visible;
-    if (this.#selectedIndex !== undefined && this.#selectedIndex >= visible.length) {
+    if (
+      this.#selectedIndex !== undefined &&
+      this.#selectedIndex >= visible.length
+    ) {
       this.#selectedIndex = undefined;
     }
-    if (this.#hoveredIndex !== undefined && this.#hoveredIndex >= visible.length) {
+    if (
+      this.#hoveredIndex !== undefined &&
+      this.#hoveredIndex >= visible.length
+    ) {
       this.#hoveredIndex = undefined;
     }
-    if (this.#keyboardIndex !== undefined && this.#keyboardIndex >= visible.length) {
+    if (
+      this.#keyboardIndex !== undefined &&
+      this.#keyboardIndex >= visible.length
+    ) {
       this.#keyboardIndex = undefined;
     }
     this.#peerSignature = signature;
@@ -273,6 +295,8 @@ class ThreeUniverseScene implements UniverseScene {
     if (identityChanged) {
       this.#fallbackPositions = fallbackPositions(visible);
       this.#seedPhysics();
+    } else {
+      this.#syncPhysicsMetadata();
     }
     this.#updatePeerGeometry();
     this.#refreshInteractionPosition();
@@ -281,7 +305,9 @@ class ThreeUniverseScene implements UniverseScene {
     }
   }
 
-  onNodeInteraction(listener: (interaction: NodeInteraction) => void): () => void {
+  onNodeInteraction(
+    listener: (interaction: NodeInteraction) => void,
+  ): () => void {
     this.#interactionListeners.add(listener);
     return () => this.#interactionListeners.delete(listener);
   }
@@ -350,7 +376,26 @@ class ThreeUniverseScene implements UniverseScene {
         transportSector(peer.transport),
       );
     });
+    this.#syncPhysicsMetadata();
     this.#physicsPositions = physics.positions(count);
+  }
+
+  #syncPhysicsMetadata(): void {
+    const physics = this.#physics;
+    if (physics === undefined) return;
+    const peerIndices = new Map(
+      this.#peers.map((peer, index) => [peer.peerId, index] as const),
+    );
+    this.#peers.slice(0, physics.maxNodes).forEach((peer, index) => {
+      physics.setPeerMetadata(
+        index,
+        peer.status,
+        peer.latencyMs,
+        peer.relayPeerId === undefined
+          ? -1
+          : (peerIndices.get(peer.relayPeerId) ?? -1),
+      );
+    });
   }
 
   readonly #renderFrame = (frameTime: number): void => {
@@ -375,7 +420,8 @@ class ThreeUniverseScene implements UniverseScene {
     if (!this.#shaderWarmupDone) {
       if (!this.#shaderWarmupStarted) {
         this.#shaderWarmupStarted = true;
-        void this.#renderer.compileAsync(this.#scene, this.#camera)
+        void this.#renderer
+          .compileAsync(this.#scene, this.#camera)
           .catch(() => undefined)
           .finally(() => {
             if (this.#disposed) return;
@@ -389,7 +435,8 @@ class ThreeUniverseScene implements UniverseScene {
       return;
     }
     if (!this.#motionPaused) {
-      const interactionActive = this.#hoveredIndex !== undefined || this.#selectedIndex !== undefined;
+      const interactionActive =
+        this.#hoveredIndex !== undefined || this.#selectedIndex !== undefined;
       if (!interactionActive) {
         this.#targetYaw += delta * 0.035;
         this.#physics?.step(delta, this.#peers.length, 1);
@@ -443,7 +490,7 @@ class ThreeUniverseScene implements UniverseScene {
       const cycle = (now % 3_600) / 3_600;
       this.#pulseRing.visible = true;
       this.#pulseRing.scale.setScalar(1 + cycle * 4.8);
-    material.opacity = (1 - cycle) * 0.68;
+      material.opacity = (1 - cycle) * 0.68;
       return;
     }
     if (remaining <= 0) {
@@ -481,12 +528,21 @@ class ThreeUniverseScene implements UniverseScene {
             ? 1
             : 1.16
           : 0.76;
-      const emphasis = index === this.#selectedIndex ? 1.42 : index === this.#hoveredIndex ? 1.22 : 1;
-      this.#matrix.makeScale(scale * emphasis, scale * emphasis, scale * emphasis);
+      const emphasis =
+        index === this.#selectedIndex
+          ? 1.42
+          : index === this.#hoveredIndex
+            ? 1.22
+            : 1;
+      this.#matrix.makeScale(
+        scale * emphasis,
+        scale * emphasis,
+        scale * emphasis,
+      );
       this.#matrix.setPosition(x, y, z);
       this.#peerMesh.setMatrixAt(index, this.#matrix);
 
-      if (peer.status === 'connected') {
+      if (this.#physics === undefined && peer.status === 'connected') {
         const edgeOffset = edgeCount * 6;
         this.#edgePositions[edgeOffset] = 0;
         this.#edgePositions[edgeOffset + 1] = 0;
@@ -507,33 +563,39 @@ class ThreeUniverseScene implements UniverseScene {
       }
     });
 
-    // A circuit-relay multiaddr carries the relay peer ID. If that relay is
-    // also present in the observed peer set, draw a second segment between
-    // the two real nodes. This is a conservative topology hint: no line is
-    // drawn between arbitrary peers merely because they are nearby.
-    for (const [relayIndex, index] of relayEdgePairs(this.#peers)) {
-      const peer = this.#peers[index];
-      if (peer === undefined) continue;
+    if (this.#physics !== undefined && this.#physicsPositions === positions) {
+      // Zig owns center/relay edge construction and writes directly into the
+      // attributes bound to its linear memory.
+      edgeCount = this.#physics.layoutEdges(this.#peers.length);
+    } else {
+      // A circuit-relay multiaddr carries the relay peer ID. If that relay is
+      // also present in the observed peer set, draw a second segment between
+      // the two real nodes. This is the compatibility path for browsers that
+      // cannot load WebAssembly.
+      for (const [relayIndex, index] of relayEdgePairs(this.#peers)) {
+        const peer = this.#peers[index];
+        if (peer === undefined) continue;
 
-      const targetOffset = index * 3;
-      const relayOffset = relayIndex * 3;
-      const edgeOffset = edgeCount * 6;
-      this.#edgePositions[edgeOffset] = positions[relayOffset] ?? 0;
-      this.#edgePositions[edgeOffset + 1] = positions[relayOffset + 1] ?? 0;
-      this.#edgePositions[edgeOffset + 2] = positions[relayOffset + 2] ?? 0;
-      this.#edgePositions[edgeOffset + 3] = positions[targetOffset] ?? 0;
-      this.#edgePositions[edgeOffset + 4] = positions[targetOffset + 1] ?? 0;
-      this.#edgePositions[edgeOffset + 5] = positions[targetOffset + 2] ?? 0;
-      this.#edgeColor
-        .copy(EDGE_COLOR)
-        .multiplyScalar(Math.min(0.72, edgeBrightness(peer.latencyMs)));
-      for (let endpoint = 0; endpoint < 2; endpoint += 1) {
-        const colorOffset = edgeOffset + endpoint * 3;
-        this.#edgeColors[colorOffset] = this.#edgeColor.r;
-        this.#edgeColors[colorOffset + 1] = this.#edgeColor.g;
-        this.#edgeColors[colorOffset + 2] = this.#edgeColor.b;
+        const targetOffset = index * 3;
+        const relayOffset = relayIndex * 3;
+        const edgeOffset = edgeCount * 6;
+        this.#edgePositions[edgeOffset] = positions[relayOffset] ?? 0;
+        this.#edgePositions[edgeOffset + 1] = positions[relayOffset + 1] ?? 0;
+        this.#edgePositions[edgeOffset + 2] = positions[relayOffset + 2] ?? 0;
+        this.#edgePositions[edgeOffset + 3] = positions[targetOffset] ?? 0;
+        this.#edgePositions[edgeOffset + 4] = positions[targetOffset + 1] ?? 0;
+        this.#edgePositions[edgeOffset + 5] = positions[targetOffset + 2] ?? 0;
+        this.#edgeColor
+          .copy(EDGE_COLOR)
+          .multiplyScalar(Math.min(0.72, edgeBrightness(peer.latencyMs)));
+        for (let endpoint = 0; endpoint < 2; endpoint += 1) {
+          const colorOffset = edgeOffset + endpoint * 3;
+          this.#edgeColors[colorOffset] = this.#edgeColor.r;
+          this.#edgeColors[colorOffset + 1] = this.#edgeColor.g;
+          this.#edgeColors[colorOffset + 2] = this.#edgeColor.b;
+        }
+        edgeCount += 1;
       }
-      edgeCount += 1;
     }
 
     this.#peerMesh.instanceMatrix.needsUpdate = true;
@@ -547,11 +609,13 @@ class ThreeUniverseScene implements UniverseScene {
     // putting diagnostics into the visible HUD. This is also useful when a
     // live network happens to report a narrow latency band.
     this.#canvas.dataset.peerRadii = this.#peers
-      .map((_, index) => Math.hypot(
-        positions[index * 3] ?? 0,
-        positions[index * 3 + 1] ?? 0,
-        positions[index * 3 + 2] ?? 0,
-      ).toFixed(2))
+      .map((_, index) =>
+        Math.hypot(
+          positions[index * 3] ?? 0,
+          positions[index * 3 + 1] ?? 0,
+          positions[index * 3 + 2] ?? 0,
+        ).toFixed(2),
+      )
       .join(',');
   }
 
@@ -565,7 +629,11 @@ class ThreeUniverseScene implements UniverseScene {
     let nearestDistance = 24;
     for (let index = 0; index < this.#peers.length; index += 1) {
       const offset = index * 3;
-      this.#pickWorld.set(positions[offset] ?? 0, positions[offset + 1] ?? 0, positions[offset + 2] ?? 0);
+      this.#pickWorld.set(
+        positions[offset] ?? 0,
+        positions[offset + 1] ?? 0,
+        positions[offset + 2] ?? 0,
+      );
       this.#pickScreen.copy(this.#pickWorld).project(this.#camera);
       if (this.#pickScreen.z < -1 || this.#pickScreen.z > 1) continue;
       const x = (this.#pickScreen.x + 1) * rect.width * 0.5;
@@ -579,12 +647,17 @@ class ThreeUniverseScene implements UniverseScene {
     return nearest;
   }
 
-  #emitInteraction(mode: NodeInteraction['mode'], index: number | undefined, pinned: boolean): void {
+  #emitInteraction(
+    mode: NodeInteraction['mode'],
+    index: number | undefined,
+    pinned: boolean,
+  ): void {
     const peer = index === undefined ? undefined : this.#peers[index];
     if (peer === undefined) {
       delete this.#canvas.dataset.selectedPeer;
       this.#canvas.setAttribute('aria-label', 'Live 3D IPFS peer universe');
-      for (const listener of this.#interactionListeners) listener({ mode: 'clear', pinned: false });
+      for (const listener of this.#interactionListeners)
+        listener({ mode: 'clear', pinned: false });
       if (this.#motionPaused) this.#updatePeerGeometry();
       return;
     }
@@ -601,8 +674,12 @@ class ThreeUniverseScene implements UniverseScene {
     const x = Math.min(Math.max(8, rawX), Math.max(8, window.innerWidth - 8));
     const y = Math.min(Math.max(8, rawY), Math.max(8, window.innerHeight - 8));
     this.#canvas.dataset.selectedPeer = peer.peerId;
-    this.#canvas.setAttribute('aria-label', `${peer.peerId}, ${peer.status} peer. Press Escape to dismiss details.`);
-    for (const listener of this.#interactionListeners) listener({ peer, x, y, mode, pinned });
+    this.#canvas.setAttribute(
+      'aria-label',
+      `${peer.peerId}, ${peer.status} peer. Press Escape to dismiss details.`,
+    );
+    for (const listener of this.#interactionListeners)
+      listener({ peer, x, y, mode, pinned });
     if (this.#motionPaused) this.#updatePeerGeometry();
     if (this.#motionPaused) this.#renderScene();
   }
@@ -611,12 +688,21 @@ class ThreeUniverseScene implements UniverseScene {
     const positions = this.#physicsPositions ?? this.#fallbackPositions;
     const offset = index * 3;
     if (offset + 2 >= positions.length) return undefined;
-    return new Vector3(positions[offset] ?? 0, positions[offset + 1] ?? 0, positions[offset + 2] ?? 0);
+    return new Vector3(
+      positions[offset] ?? 0,
+      positions[offset + 1] ?? 0,
+      positions[offset + 2] ?? 0,
+    );
   }
 
   #refreshInteractionPosition(): void {
     const index = this.#selectedIndex ?? this.#hoveredIndex;
-    if (index !== undefined) this.#emitInteraction(this.#selectedIndex === undefined ? 'hover' : 'select', index, this.#selectedIndex !== undefined);
+    if (index !== undefined)
+      this.#emitInteraction(
+        this.#selectedIndex === undefined ? 'hover' : 'select',
+        index,
+        this.#selectedIndex !== undefined,
+      );
   }
 
   #resize(): void {
@@ -710,7 +796,8 @@ class ThreeUniverseScene implements UniverseScene {
       if (hit !== this.#hoveredIndex) {
         this.#hoveredIndex = hit;
         this.#keyboardIndex = hit;
-        if (this.#selectedIndex === undefined) this.#emitInteraction('hover', hit, false);
+        if (this.#selectedIndex === undefined)
+          this.#emitInteraction('hover', hit, false);
       } else if (hit !== undefined && this.#selectedIndex === undefined) {
         this.#emitInteraction('hover', hit, false);
       }
@@ -737,13 +824,17 @@ class ThreeUniverseScene implements UniverseScene {
       if (this.#canvas.hasPointerCapture(event.pointerId)) {
         this.#canvas.releasePointerCapture(event.pointerId);
       }
-      const moved = Math.hypot(event.clientX - this.#pointerDownX, event.clientY - this.#pointerDownY);
+      const moved = Math.hypot(
+        event.clientX - this.#pointerDownX,
+        event.clientY - this.#pointerDownY,
+      );
       if (event.type !== 'pointercancel' && moved < 10) {
         // Prefer the up position, but retain the down hit for a click that
         // lands a few pixels away after a high-DPI pointer event. The camera
         // is frozen while a node is hovered/selected, so this never invents a
         // peer; it only makes the click target tolerant of device jitter.
-        const hit = this.#peerAt(event.clientX, event.clientY) ?? this.#pointerDownIndex;
+        const hit =
+          this.#peerAt(event.clientX, event.clientY) ?? this.#pointerDownIndex;
         if (hit === undefined) {
           this.#clearInteraction();
         } else {
@@ -828,7 +919,8 @@ class ThreeUniverseScene implements UniverseScene {
 
   #selectRelative(delta: -1 | 1): void {
     if (this.#peers.length === 0) return;
-    const current = this.#selectedIndex ?? this.#keyboardIndex ?? this.#hoveredIndex;
+    const current =
+      this.#selectedIndex ?? this.#keyboardIndex ?? this.#hoveredIndex;
     const start = current ?? (delta > 0 ? -1 : 0);
     const next = (start + delta + this.#peers.length) % this.#peers.length;
     this.#keyboardIndex = next;
@@ -869,7 +961,8 @@ class ThreeUniverseScene implements UniverseScene {
   }
 
   #toggleKeyboardSelection(): void {
-    const index = this.#selectedIndex ?? this.#keyboardIndex ?? this.#hoveredIndex;
+    const index =
+      this.#selectedIndex ?? this.#keyboardIndex ?? this.#hoveredIndex;
     if (index === undefined) return;
     if (this.#selectedIndex === index) {
       this.#selectedIndex = undefined;
@@ -915,12 +1008,9 @@ function createDecorativeDust(count: number): Points {
     positions[offset + 2] = radius * sinePhi * Math.sin(theta);
     const colorSample = unitFromInteger(xorshift(state ^ 0x7f4a7c15));
     const color =
-      colorSample > 0.94
-        ? aurora
-        : colorSample > 0.89
-          ? violet
-          : neutral;
-    const luminance = 0.46 + unitFromInteger(xorshift(state ^ 0x9e3779b9)) * 0.54;
+      colorSample > 0.94 ? aurora : colorSample > 0.89 ? violet : neutral;
+    const luminance =
+      0.46 + unitFromInteger(xorshift(state ^ 0x9e3779b9)) * 0.54;
     colors[offset] = color.r * luminance;
     colors[offset + 1] = color.g * luminance;
     colors[offset + 2] = color.b * luminance;
@@ -941,10 +1031,7 @@ function createDecorativeDust(count: number): Points {
   });
   material.toneMapped = false;
   material.fog = false;
-  return new Points(
-    geometry,
-    material,
-  );
+  return new Points(geometry, material);
 }
 
 function createDustSprite(): CanvasTexture | undefined {
@@ -1034,7 +1121,12 @@ function createObserverCore(group: Group, mobileQuality = false): void {
     }),
   );
   atmosphere.material.toneMapped = false;
-  const ringGeometry = new TorusGeometry(7.4, 0.045, 4, mobileQuality ? 64 : 112);
+  const ringGeometry = new TorusGeometry(
+    7.4,
+    0.045,
+    4,
+    mobileQuality ? 64 : 112,
+  );
   const ringMaterial = new MeshBasicMaterial({
     color: 0xa897ff,
     transparent: true,
@@ -1093,7 +1185,8 @@ export function radialDistance(peer: PeerRecord): number {
     return 18 + seed * 14;
   }
   const latency = MathUtils.clamp(peer.latencyMs, 10, 1_000);
-  const normalized = (Math.log(latency) - Math.log(10)) / (Math.log(1_000) - Math.log(10));
+  const normalized =
+    (Math.log(latency) - Math.log(10)) / (Math.log(1_000) - Math.log(10));
   // Keep the measured signal dominant over the stable per-peer jitter. The
   // wider 8–50 world-unit span makes a 10ms peer visibly closer than an 800ms
   // peer while preserving a small, deterministic spread at each latency.
@@ -1117,9 +1210,8 @@ export function relayEdgePairs(
     if (peer.status !== 'connected' || peer.relayPeerId === undefined) return;
     const relayIndex = peerIndices.get(peer.relayPeerId);
     if (relayIndex === undefined || relayIndex === index) return;
-    const edgeKey = relayIndex < index
-      ? `${relayIndex}:${index}`
-      : `${index}:${relayIndex}`;
+    const edgeKey =
+      relayIndex < index ? `${relayIndex}:${index}` : `${index}:${relayIndex}`;
     if (seenEdges.has(edgeKey)) return;
     seenEdges.add(edgeKey);
     pairs.push([relayIndex, index]);

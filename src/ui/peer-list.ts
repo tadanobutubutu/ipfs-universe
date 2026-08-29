@@ -102,12 +102,34 @@ function createPeerItem(peer: PeerRecord): HTMLLIElement {
     detail('State', 'status', statusLabel(peer.status)),
     detail('Direction', 'direction', peer.direction ?? 'Not observed'),
     detail('Transport', 'transport', peer.transport ?? 'Not observed'),
-    detail('Protocols', 'protocols', peer.protocols?.join(', ') || 'Not observed'),
+    detail(
+      'Protocols',
+      'protocols',
+      peer.protocols?.join(', ') || 'Not observed',
+    ),
     detail('Agent', 'agent', peer.agentVersion ?? 'Not observed'),
-    detail('Protocol version', 'protocol-version', peer.protocolVersion ?? 'Not observed'),
-    detail('Addresses', 'addresses', peer.addressCount === undefined ? 'Not observed' : String(peer.addressCount)),
-    detail('Relay', 'relay', peer.relayPeerId === undefined ? 'Not observed' : peer.relayPeerId),
-    detail('Source', 'source', peer.source === 'kubo' ? 'Local Kubo' : 'Browser Helia'),
+    detail(
+      'Protocol version',
+      'protocol-version',
+      peer.protocolVersion ?? 'Not observed',
+    ),
+    detail(
+      'Addresses',
+      'addresses',
+      peer.addressCount === undefined
+        ? 'Not observed'
+        : String(peer.addressCount),
+    ),
+    detail(
+      'Relay',
+      'relay',
+      peer.relayPeerId === undefined ? 'Not observed' : peer.relayPeerId,
+    ),
+    detail(
+      'Source',
+      'source',
+      peer.source === 'kubo' ? 'Local Kubo' : 'Browser Helia',
+    ),
     detail('Latency', 'latency-detail', latencyLabel(peer.latencyMs)),
     observedTimeDetail('Last observed', 'last-seen', peer.lastSeenAt),
   );
@@ -159,7 +181,9 @@ function updatePeerItem(
   requiredField<HTMLElement>(item, 'protocol-version').textContent =
     peer.protocolVersion ?? 'Not observed';
   requiredField<HTMLElement>(item, 'addresses').textContent =
-    peer.addressCount === undefined ? 'Not observed' : String(peer.addressCount);
+    peer.addressCount === undefined
+      ? 'Not observed'
+      : String(peer.addressCount);
   requiredField<HTMLElement>(item, 'relay').textContent =
     peer.relayPeerId ?? 'Not observed';
   requiredField<HTMLElement>(item, 'source').textContent =
@@ -205,11 +229,7 @@ function updateButtonLabel(
   );
 }
 
-function detail(
-  label: string,
-  field: string,
-  value: string,
-): HTMLDivElement {
+function detail(label: string, field: string, value: string): HTMLDivElement {
   const wrapper = document.createElement('div');
   const term = document.createElement('dt');
   const description = document.createElement('dd');
@@ -288,7 +308,9 @@ function statusLabel(status: PeerRecord['status']): string {
 }
 
 function latencyLabel(latencyMs: number | undefined): string {
-  return latencyMs === undefined ? 'Not measured' : `${Math.round(latencyMs)} ms`;
+  return latencyMs === undefined
+    ? 'Not measured'
+    : `${Math.round(latencyMs)} ms`;
 }
 
 function relativeTime(observedAt: number, now: number): string {
