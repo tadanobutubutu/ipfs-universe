@@ -1,7 +1,3 @@
 {
-  "extends": ["html-validate:recommended"],
-  "rules": {
-    "doctype-style": "off",
-    "void-style": "off"
-  }
+  "extends": ["html-validate:recommended"]
 }

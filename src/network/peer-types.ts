@@ -15,6 +15,8 @@ export type PeerObservation =
       readonly observedAt: number;
       readonly direction: PeerConnectionDirection;
       readonly transport: string;
+      /** Relay peer carried by a /p2p-circuit address, when observed. */
+      readonly relayPeerId?: string;
       readonly source?: PeerSource;
       readonly protocols?: readonly string[];
       readonly agentVersion?: string;
@@ -51,6 +53,7 @@ export interface PeerRecord {
   readonly lastSeenAt: number;
   readonly direction?: PeerConnectionDirection;
   readonly transport?: string;
+  readonly relayPeerId?: string;
   readonly source?: PeerSource;
   readonly protocols?: readonly string[];
   readonly agentVersion?: string;

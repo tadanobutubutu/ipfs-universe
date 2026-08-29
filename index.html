@@ -1,34 +1,34 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" data-motion="running" data-scene="pending">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#050508" />
-    <meta name="color-scheme" content="dark" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#050508">
+    <meta name="color-scheme" content="dark">
     <meta
       name="description"
       content="A live 3D observatory for the IPFS peers this browser can actually discover and connect to."
-    />
-    <link rel="canonical" href="https://ipfsuniverse.xyz/" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Peerstellation" />
-    <meta property="og:title" content="Peerstellation — Live Peer Observatory" />
+    >
+    <link rel="canonical" href="https://ipfsuniverse.xyz/">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Peerstellation">
+    <meta property="og:title" content="Peerstellation — Live Peer Observatory">
     <meta
       property="og:description"
       content="Enter a real-time 3D view of the IPFS neighborhood this browser can actually observe."
-    />
-    <meta property="og:url" content="https://ipfsuniverse.xyz/" />
-    <meta property="og:image" content="https://ipfsuniverse.xyz/hero.png" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Peerstellation — Live Peer Observatory" />
+    >
+    <meta property="og:url" content="https://ipfsuniverse.xyz/">
+    <meta property="og:image" content="https://ipfsuniverse.xyz/hero.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Peerstellation — Live Peer Observatory">
     <meta
       name="twitter:description"
       content="A real-time 3D view of this browser’s observable IPFS neighborhood."
-    />
-    <meta name="twitter:image" content="https://ipfsuniverse.xyz/hero.png" />
+    >
+    <meta name="twitter:image" content="https://ipfsuniverse.xyz/hero.png">
     <title>Peerstellation — Live Peer Observatory</title>
-    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="/src/styles.css">
   </head>
   <body>
     <a class="skip-link" href="#universe-main">Skip to the observatory</a>
@@ -49,6 +49,13 @@
           <i class="connection-chip__dot" aria-hidden="true"></i>
           <span id="header-network-state">Connecting</span>
         </span>
+        <button class="text-button local-kubo-button" id="kubo-probe" type="button" aria-label="Read local Kubo daemon" title="Read local Kubo daemon">
+          <svg class="kubo-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="m12 3 7.8 4.5v9L12 21l-7.8-4.5v-9L12 3Z" />
+            <circle cx="12" cy="12" r="2.1" />
+          </svg>
+        </button>
+        <button class="text-button" id="network-retry" type="button" hidden>Retry</button>
         <button
           class="icon-button"
           id="motion-toggle"
@@ -80,10 +87,12 @@
       <section class="universe" aria-labelledby="universe-title">
         <canvas
           id="universe-canvas"
-          role="img"
+          role="application"
+          aria-roledescription="interactive 3D peer observatory"
           tabindex="0"
           aria-label="Live 3D IPFS peer universe"
           aria-describedby="scene-description scene-controls"
+          aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown PageUp PageDown [ ] Enter Space Escape"
         >
           Your browser cannot draw the 3D scene. The peer explorer remains available.
         </canvas>
@@ -91,7 +100,14 @@
         <div class="aurora" aria-hidden="true"></div>
         <div class="scene-vignette" aria-hidden="true"></div>
 
-        <aside class="node-tooltip" id="node-tooltip" role="tooltip" hidden>
+        <aside
+          class="node-tooltip"
+          id="node-tooltip"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          hidden
+        >
           <div class="node-tooltip__heading">
             <span class="signal-dot" aria-hidden="true"></span>
             <strong id="node-tip-peer">Peer</strong>
@@ -105,9 +121,10 @@
             <div><dt>Agent</dt><dd id="node-tip-agent">not observed</dd></div>
             <div><dt>Protocol</dt><dd id="node-tip-protocol-version">not observed</dd></div>
             <div><dt>Addresses</dt><dd id="node-tip-addresses">not observed</dd></div>
+            <div><dt>Relay</dt><dd id="node-tip-relay">not observed</dd></div>
             <div><dt>Source</dt><dd id="node-tip-source">browser Helia</dd></div>
           </dl>
-          <span class="node-tooltip__hint">Tap / click to pin · [ ] to inspect · Esc to dismiss</span>
+          <span class="node-tooltip__hint">Tap / click or [ ] to select · Esc to dismiss</span>
         </aside>
 
         <section
@@ -137,7 +154,7 @@
 
         <div class="hero-copy">
           <p class="eyebrow"><span class="signal-dot" aria-hidden="true"></span>Live browser observatory</p>
-          <h1 id="universe-title">Live browser observatory</h1>
+          <h1 id="universe-title">Live browser observatory · a living sky for reachable peers</h1>
           <p class="hero-copy__body">
             This browser observes reachable peers, measures their responses, and renders
             only evidence from this session. Nothing here is simulated.
@@ -151,11 +168,19 @@
             <strong id="network-status">Opening a browser node…</strong>
             <code id="local-peer-id">Identity pending</code>
           </span>
-          <button class="text-button" id="network-retry" type="button" hidden>Retry</button>
         </div>
 
+        <span
+          class="kubo-status"
+          id="kubo-status"
+          role="status"
+          aria-atomic="true"
+          aria-hidden="true"
+          data-visible="false"
+        >Browser Helia is the default source.</span>
+
         <p class="scene-guide" id="scene-controls">
-          <span class="scene-guide__desktop">Drag · scroll · arrows · [ ] inspect · Enter pin</span>
+          <span class="scene-guide__desktop">Drag · scroll · arrows · [ ] select · Esc dismiss</span>
           <span class="scene-guide__mobile">Swipe · pinch · tap to pin</span>
         </p>
 
@@ -188,8 +213,9 @@
           connected peers and have a line to the center. Violet nodes were discovered but are
           not presented as connected. Distance from the center maps measured latency; unmeasured
           peers occupy the outer orbit, and angle groups the observed transport. Decorative
-          background stars do not represent peers. Use the peer explorer for the same information
-          in text form.
+          background stars do not represent peers. A relay edge appears only when the relay ID is
+          present in the observed peer set; arbitrary peer-to-peer topology is never inferred. Use
+          the peer explorer for the same information in text form.
         </p>
       </section>
     </main>
@@ -218,7 +244,7 @@
         <div class="peer-tools">
           <label>
             <span>Find peer</span>
-            <input id="peer-search" type="search" autocomplete="off" spellcheck="false" placeholder="Peer ID" />
+            <input id="peer-search" type="search" autocomplete="off" spellcheck="false" placeholder="Peer ID">
           </label>
           <label>
             <span>State</span>
@@ -232,10 +258,6 @@
             </select>
           </label>
           <output id="peer-result-count" for="peer-search peer-filter">0 shown</output>
-        </div>
-        <div class="local-kubo">
-          <button class="text-button" id="kubo-probe" type="button">Read local daemon</button>
-          <span id="kubo-status" role="status">Browser Helia is the default source.</span>
         </div>
         <ol class="peer-list" id="peer-list" aria-label="Observed IPFS peers"></ol>
         <p class="peer-empty" id="peer-empty">

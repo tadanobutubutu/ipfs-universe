@@ -101,7 +101,9 @@ canvas:focus-visible,
   gap: 1rem;
   padding: 1rem clamp(1rem, 3vw, 3.25rem);
   border-block-end: 1px solid var(--line);
-  background: linear-gradient(180deg, rgb(5 5 8 / 94%), rgb(5 5 8 / 50%));
+  /* Keep a deterministic backdrop behind small text so contrast tools and
+     users with low vision get the same readable result over the animated sky. */
+  background: #050508;
   backdrop-filter: blur(0.75rem);
 }
 
@@ -153,7 +155,7 @@ canvas:focus-visible,
   align-items: center;
   gap: 0.45rem;
   padding-inline: 0.35rem;
-  color: var(--paper-dim);
+  color: var(--paper-muted);
   font: 700 0.68rem/1 var(--mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -221,10 +223,73 @@ canvas:focus-visible,
 }
 
 .control-label {
+  /* The icon already has an explicit accessible name. Keep the first view
+     spatially quiet; screen readers still receive the button's aria-label. */
+  display: none;
+}
+
+.topbar__actions .local-kubo-button {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border-color: rgb(115 251 211 / 46%);
+  color: var(--aurora);
+  background: transparent;
+  font-weight: 800;
+}
+
+.kubo-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.local-kubo-button[data-busy="true"] .kubo-icon {
+  animation: kubo-spin 1.1s linear infinite;
+}
+
+@keyframes kubo-spin {
+  to { rotate: 1turn; }
+}
+
+.topbar__actions #network-retry {
+  min-width: 44px;
+  min-height: 44px;
+  padding-inline: 0.7rem;
+}
+
+.kubo-status {
+  position: fixed;
+  z-index: 8;
+  inset-block-start: 5.5rem;
+  inset-inline-end: clamp(1rem, 3.25vw, 3.25rem);
+  width: min(26rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgb(115 251 211 / 42%);
+  border-radius: 0.75rem;
+  color: var(--paper-muted);
+  background: #111217;
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 30%);
   font-size: var(--step--1);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  translate: 0 -0.5rem;
+  transition: opacity 180ms ease, translate 180ms ease;
+  visibility: hidden;
+}
+
+.kubo-status[data-visible="true"] {
+  opacity: 1;
+  translate: 0;
+  visibility: visible;
 }
 
 .peer-button {
@@ -273,8 +338,43 @@ canvas:focus-visible,
   min-height: max(100svh, 54rem);
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 48%, transparent 0 16rem, rgb(5 5 8 / 16%) 37rem),
+    radial-gradient(circle at 50% 48%, rgb(18 28 39 / 28%) 0 14rem, rgb(9 14 23 / 20%) 30rem, transparent 43rem),
     linear-gradient(180deg, transparent 60%, rgb(5 5 8 / 92%));
+}
+
+@media (min-width: 55rem) {
+  /* Wide screens otherwise dilute the central signal across a much larger
+     black field than a phone. Lift only the desktop midtone so the observatory
+     keeps the same perceived depth at 1440px without washing out the stars. */
+  .universe {
+    background:
+      radial-gradient(circle at 50% 48%, rgb(26 39 53 / 42%) 0 18rem, rgb(11 18 29 / 24%) 36rem, transparent 50rem),
+      linear-gradient(180deg, transparent 60%, rgb(5 5 8 / 92%));
+  }
+}
+
+/* The first frame is deliberately a CSS-only observatory while WebGL warms
+   its shaders. It keeps the immediate viewport alive without pretending that
+   a peer has been observed. The actual canvas takes over at data-scene=ready. */
+[data-scene="pending"] .universe::before {
+  position: absolute;
+  z-index: -2;
+  inset: 50% auto auto 50%;
+  width: min(18rem, 46vw);
+  aspect-ratio: 1;
+  border: 1px solid rgb(115 251 211 / 52%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5rem rgb(115 251 211 / 7%), 0 0 0 4rem rgb(168 151 255 / 5%);
+  content: '';
+  opacity: 0.82;
+  translate: -50% -50%;
+  transform: rotateX(62deg) rotateZ(-18deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-scene="pending"] .universe::before {
+    transform: rotateX(62deg) rotateZ(-18deg);
+  }
 }
 
 #universe-canvas {
@@ -391,10 +491,10 @@ canvas:focus-visible,
   height: min(38rem, 62vh);
   border-radius: 50%;
   background:
-    radial-gradient(ellipse at 42% 50%, rgb(115 251 211 / 10%), transparent 48%),
-    radial-gradient(ellipse at 63% 45%, rgb(168 151 255 / 11%), transparent 46%);
+    radial-gradient(ellipse at 42% 50%, rgb(115 251 211 / 13%), transparent 48%),
+    radial-gradient(ellipse at 63% 45%, rgb(168 151 255 / 14%), transparent 46%);
   filter: blur(3rem);
-  opacity: 0.75;
+  opacity: 0.86;
   pointer-events: none;
   transform: rotate(-8deg);
 }
@@ -423,6 +523,20 @@ canvas:focus-visible,
   pointer-events: none;
   translate: 0 -50%;
   transform-origin: left center;
+}
+
+.node-tooltip::before {
+  position: absolute;
+  left: var(--anchor-line-x, 0px);
+  top: var(--anchor-line-y, 50%);
+  width: var(--anchor-line-length, 0px);
+  height: var(--anchor-line-width, 1px);
+  content: '';
+  background: linear-gradient(90deg, rgb(201 255 112 / 78%), rgb(115 251 211 / 18%));
+  opacity: 0.85;
+  pointer-events: none;
+  transform: rotate(var(--anchor-line-angle, 0rad));
+  transform-origin: 0 50%;
 }
 
 .node-tooltip[hidden] {
@@ -636,10 +750,13 @@ canvas:focus-visible,
   inset-block-end: clamp(14rem, 22vh, 15.5rem);
   inset-inline-end: clamp(1rem, 3.25vw, 3.25rem);
   margin: 0;
-  color: var(--paper-dim);
+  color: var(--paper-muted);
   font: var(--step--1)/1.4 var(--mono);
   letter-spacing: 0.04em;
-  opacity: 0.58;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgb(244 242 234 / 24%);
+  border-radius: 999px;
+  background: #050508;
   pointer-events: none;
 }
 
@@ -851,33 +968,6 @@ canvas:focus-visible,
   color: var(--paper-muted);
   font-size: var(--step--1);
   white-space: nowrap;
-}
-
-.local-kubo {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 0.75rem;
-  padding-block: 0.65rem;
-  border-block: 1px solid var(--line);
-  color: var(--paper-dim);
-  font-size: var(--step--1);
-}
-
-.local-kubo .text-button {
-  flex: 0 0 auto;
-  min-height: 2.35rem;
-  padding-inline: 0.8rem;
-  border-color: rgb(115 251 211 / 46%);
-  color: var(--aurora);
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.local-kubo span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .legend-dot {
@@ -1116,6 +1206,24 @@ canvas:focus-visible,
   pointer-events: none;
 }
 
+/* The sky is the first-view product surface. Keep one meaningful heading for
+   document navigation, while moving explanatory copy into the accessible
+   canvas description and the peer explorer. */
+.hero-copy .eyebrow,
+.hero-copy__body {
+  display: none;
+}
+
+.hero-copy h1 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 @media (max-width: 34rem) {
   .topbar {
     min-height: 60px;
@@ -1154,6 +1262,12 @@ canvas:focus-visible,
   .icon-button svg,
   .dialog-close svg {
     width: 24px;
+  }
+
+  .kubo-status {
+    inset-block-start: 4.25rem;
+    inset-inline: 0.75rem;
+    width: auto;
   }
 
   .control-label {
@@ -1368,14 +1482,6 @@ canvas:focus-visible,
 
   .peer-tools {
     grid-template-columns: 1fr;
-  }
-
-  .local-kubo {
-    flex-wrap: wrap;
-  }
-
-  .local-kubo span {
-    flex: 1 1 8rem;
   }
 
   .peer-tools output {

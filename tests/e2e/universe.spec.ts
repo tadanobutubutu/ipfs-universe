@@ -29,12 +29,16 @@ test('shows the 3D observatory immediately with semantic structure', async ({
   await expect(
     page.getByRole('heading', { level: 1, name: /live browser observatory/i }),
   ).toHaveCount(1);
-  const canvas = page.getByRole('img', { name: /3D.*peer universe/i });
+  const canvas = page.getByRole('application', { name: /3D.*peer universe/i });
   await expect(canvas).toBeVisible();
   await expect(canvas).toHaveAttribute(
     'aria-describedby',
     /\bscene-description\b/u,
   );
+  await expect(page.locator('#node-tooltip')).toHaveAttribute('role', 'status');
+  await expect(page.locator('#node-tooltip')).toHaveAttribute('aria-live', 'polite');
+  await expect(page.locator('#kubo-probe')).toBeVisible();
+  expect(await page.locator('#kubo-probe').evaluate((element) => element.closest('dialog'))).toBeNull();
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
     timeout: 3_000,
   });
@@ -84,6 +88,7 @@ test('honors reduced motion before the first rendered frame', async ({ page }) =
     'aria-pressed',
     'true',
   );
+  await expect(page.locator('#universe-canvas')).toHaveAttribute('data-pulse', 'static');
 });
 
 test('reflows at 320 CSS pixels and 200 percent text size', async ({ page }) => {
@@ -378,7 +383,7 @@ test('has no automated WCAG A or AA violations in the initial state', async ({
 }) => {
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
-  await expect(page.locator('[aria-live]')).toHaveCount(1);
+  await expect(page.locator('[aria-live]')).toHaveCount(2);
   await expectNoAutomatedAccessibilityViolations(page);
 });
 
@@ -395,6 +400,102 @@ test('keeps the live scene inside the fixed draw-call budget', async ({ page }) 
 
   expect(drawCalls).toBeLessThanOrEqual(12);
   expect(laterObjects).toBe(initialObjects);
+});
+
+test('draws relay edges only when both relay endpoints are observed', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
+  const result = await page.evaluate(() => {
+    type FixturePeer = {
+      peerId: string;
+      status: 'connected';
+      statusObservedAt: number;
+      firstSeenAt: number;
+      lastSeenAt: number;
+      direction: 'inbound' | 'outbound';
+      transport: string;
+      relayPeerId?: string;
+    };
+    const setPeers = (window as Window & {
+      __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
+    }).__peerstellationSetPeers;
+    if (setPeers === undefined) throw new Error('development relay fixture is unavailable');
+    const relay: FixturePeer = {
+      peerId: '12D3KooWRelayEvidence',
+      status: 'connected',
+      statusObservedAt: 1,
+      firstSeenAt: 1,
+      lastSeenAt: 1,
+      direction: 'outbound',
+      transport: 'websocket',
+    };
+    const target: FixturePeer = {
+      peerId: '12D3KooWTargetEvidence',
+      status: 'connected',
+      statusObservedAt: 1,
+      firstSeenAt: 1,
+      lastSeenAt: 1,
+      direction: 'inbound',
+      transport: 'webtransport',
+      relayPeerId: relay.peerId,
+    };
+    setPeers([relay, target]);
+    const withRelay = document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset.edgeSegments;
+    setPeers([target]);
+    const withoutRelay = document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset.edgeSegments;
+    return { withRelay, withoutRelay };
+  });
+  expect(result).toEqual({ withRelay: '3', withoutRelay: '1' });
+});
+
+test('keeps the measured latency-to-radius signal visible in the live renderer', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
+  const result = await page.evaluate(() => {
+    type FixturePeer = {
+      peerId: string;
+      status: 'connected';
+      statusObservedAt: number;
+      firstSeenAt: number;
+      lastSeenAt: number;
+      direction: 'inbound' | 'outbound';
+      transport: string;
+      latencyMs: number;
+    };
+    const setPeers = (window as Window & {
+      __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
+    }).__peerstellationSetPeers;
+    if (setPeers === undefined) throw new Error('development latency fixture is unavailable');
+    setPeers([
+      {
+        peerId: '12D3KooWFastLatency',
+        status: 'connected',
+        statusObservedAt: 1,
+        firstSeenAt: 1,
+        lastSeenAt: 1,
+        direction: 'outbound',
+        transport: 'websocket',
+        latencyMs: 10,
+      },
+      {
+        peerId: '12D3KooWSlowLatency',
+        status: 'connected',
+        statusObservedAt: 1,
+        firstSeenAt: 1,
+        lastSeenAt: 1,
+        direction: 'inbound',
+        transport: 'webtransport',
+        latencyMs: 1_000,
+      },
+    ]);
+    const radii = (document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset.peerRadii ?? '')
+      .split(',')
+      .map(Number);
+    return { radii, ratio: (radii[1] ?? 0) / (radii[0] ?? 1) };
+  });
+  expect(result.radii).toHaveLength(2);
+  expect(result.radii[1]).toBeGreaterThan(result.radii[0]);
+  expect(result.ratio).toBeGreaterThan(4);
 });
 
 test('starts a real Helia browser identity without a simulation fallback', async ({

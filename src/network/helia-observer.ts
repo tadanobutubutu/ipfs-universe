@@ -101,13 +101,18 @@ export function normalizeConnections(
     }
   }
 
-  return [...newestByPeer.entries()].map(([peerId, connection]) => ({
-    type: 'connected' as const,
-    peerId,
-    observedAt,
-    direction: connection.direction,
-    transport: transportFromMultiaddr(connection.remoteAddr.toString()),
-  }));
+  return [...newestByPeer.entries()].map(([peerId, connection]) => {
+    const remoteAddr = connection.remoteAddr.toString();
+    const relayPeerId = relayPeerIdFromMultiaddr(remoteAddr);
+    return {
+      type: 'connected' as const,
+      peerId,
+      observedAt,
+      direction: connection.direction,
+      transport: transportFromMultiaddr(remoteAddr),
+      ...(relayPeerId === undefined ? {} : { relayPeerId }),
+    };
+  });
 }
 
 export async function startHeliaObserver(
@@ -552,6 +557,14 @@ function transportFromMultiaddr(multiaddr: string): string {
     return 'tcp';
   }
   return 'unknown';
+}
+
+function relayPeerIdFromMultiaddr(multiaddr: string): string | undefined {
+  const match = /(?:^|\/)p2p\/([^/]+)\/p2p-circuit(?:\/|$)/u.exec(multiaddr);
+  const relayPeerId = match?.[1];
+  return relayPeerId === undefined || relayPeerId.trim() === ''
+    ? undefined
+    : relayPeerId.slice(0, 128);
 }
 
 function positiveDuration(value: number, name: string): number {

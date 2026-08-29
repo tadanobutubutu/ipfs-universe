@@ -1,0 +1,20 @@
+# Peerstellation
+
+Peerstellation is a web-only, real-time 3D observatory for peers reachable from a browser-hosted Helia/libp2p node. The sky is rendered from measured session observations; it never fabricates peers, latency, or topology.
+
+## Primary pages
+
+- [Peerstellation live observatory](https://ipfsuniverse.xyz/): the interactive 3D peer observatory.
+- [Source repository](https://github.com/tadanobutubutu/peerstellation): TypeScript, Rust WebAssembly, and Zig WebAssembly source.
+- [Documentation](https://github.com/tadanobutubutu/peerstellation#readme): setup, safety boundaries, and deployment notes.
+
+## Usage boundaries
+
+- Peer data is ephemeral and scoped to the current browser session.
+- Local Kubo daemon inspection requires an explicit user action and a narrowly configured CORS origin.
+- Do not infer a complete IPFS network graph from this observatory; it only displays evidence available to the current browser node.
+
+## Technical references
+
+- [Helia documentation](https://helia.org/)
+- [libp2p documentation](https://libp2p.io/)

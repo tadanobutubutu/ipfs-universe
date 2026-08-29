@@ -106,6 +106,7 @@ function createPeerItem(peer: PeerRecord): HTMLLIElement {
     detail('Agent', 'agent', peer.agentVersion ?? 'Not observed'),
     detail('Protocol version', 'protocol-version', peer.protocolVersion ?? 'Not observed'),
     detail('Addresses', 'addresses', peer.addressCount === undefined ? 'Not observed' : String(peer.addressCount)),
+    detail('Relay', 'relay', peer.relayPeerId === undefined ? 'Not observed' : peer.relayPeerId),
     detail('Source', 'source', peer.source === 'kubo' ? 'Local Kubo' : 'Browser Helia'),
     detail('Latency', 'latency-detail', latencyLabel(peer.latencyMs)),
     observedTimeDetail('Last observed', 'last-seen', peer.lastSeenAt),
@@ -159,6 +160,8 @@ function updatePeerItem(
     peer.protocolVersion ?? 'Not observed';
   requiredField<HTMLElement>(item, 'addresses').textContent =
     peer.addressCount === undefined ? 'Not observed' : String(peer.addressCount);
+  requiredField<HTMLElement>(item, 'relay').textContent =
+    peer.relayPeerId ?? 'Not observed';
   requiredField<HTMLElement>(item, 'source').textContent =
     peer.source === 'kubo' ? 'Local Kubo' : 'Browser Helia';
   requiredField<HTMLElement>(item, 'latency-detail').textContent = latencyLabel(

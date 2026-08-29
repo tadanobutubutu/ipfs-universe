@@ -53,6 +53,7 @@ export class AppShell {
   readonly #nodeTooltipAgent = requiredElement<HTMLElement>('node-tip-agent');
   readonly #nodeTooltipProtocol = requiredElement<HTMLElement>('node-tip-protocol-version');
   readonly #nodeTooltipAddresses = requiredElement<HTMLElement>('node-tip-addresses');
+  readonly #nodeTooltipRelay = requiredElement<HTMLElement>('node-tip-relay');
   readonly #nodeTooltipSource = requiredElement<HTMLElement>('node-tip-source');
   readonly #headerNetworkState = requiredElement<HTMLElement>('header-network-state');
   readonly #headerNetworkDot = requiredSelector<HTMLElement>('.connection-chip__dot');
@@ -122,8 +123,14 @@ export class AppShell {
 
   setKuboStatus(message: string, busy = false): void {
     this.#kuboStatus.textContent = message;
+    this.#kuboStatus.dataset.visible = 'true';
+    this.#kuboStatus.removeAttribute('aria-hidden');
     this.#kuboProbe.disabled = busy;
-    this.#kuboProbe.textContent = busy ? 'Reading local daemon…' : 'Read local daemon';
+    this.#kuboProbe.dataset.busy = busy ? 'true' : 'false';
+    this.#kuboProbe.setAttribute(
+      'aria-label',
+      busy ? 'Reading local Kubo daemon' : 'Read local Kubo daemon',
+    );
   }
 
   showNodeDetails(
@@ -137,7 +144,7 @@ export class AppShell {
       this.#tooltipSignature = '';
       return;
     }
-    const signature = `${peer.peerId}|${peer.status}|${peer.source ?? ''}|${peer.latencyMs ?? ''}|${peer.direction ?? ''}|${peer.transport ?? ''}|${peer.agentVersion ?? ''}|${peer.protocolVersion ?? ''}|${peer.addressCount ?? ''}|${peer.protocols?.join(',') ?? ''}`;
+    const signature = `${peer.peerId}|${peer.status}|${peer.source ?? ''}|${peer.latencyMs ?? ''}|${peer.direction ?? ''}|${peer.transport ?? ''}|${peer.agentVersion ?? ''}|${peer.protocolVersion ?? ''}|${peer.addressCount ?? ''}|${peer.relayPeerId ?? ''}|${peer.protocols?.join(',') ?? ''}`;
     if (signature !== this.#tooltipSignature) {
       this.#tooltipSignature = signature;
       this.#nodeTooltipPeer.textContent = shortPeerId(peer.peerId);
@@ -150,6 +157,8 @@ export class AppShell {
       this.#nodeTooltipAgent.textContent = peer.agentVersion ?? 'not observed';
       this.#nodeTooltipProtocol.textContent = peer.protocolVersion ?? 'not observed';
       this.#nodeTooltipAddresses.textContent = peer.addressCount === undefined ? 'not observed' : `${peer.addressCount}`;
+      this.#nodeTooltipRelay.textContent = peer.relayPeerId === undefined ? 'not observed' : shortPeerId(peer.relayPeerId);
+      this.#nodeTooltipRelay.title = peer.relayPeerId ?? '';
       this.#nodeTooltipSource.textContent = peer.source === 'kubo' ? 'local Kubo' : 'browser Helia';
     }
     this.#nodeTooltip.dataset.pinned = pinned ? 'true' : 'false';
@@ -180,6 +189,18 @@ export class AppShell {
     const top = Math.min(Math.max(height / 2 + 8, anchorY), Math.max(height / 2 + 8, window.innerHeight - height / 2 - 8));
     this.#nodeTooltip.style.left = `${left}px`;
     this.#nodeTooltip.style.top = `${top}px`;
+    const edgeX = anchorX < left ? left : left + width;
+    const edgeY = top;
+    const deltaX = anchorX - edgeX;
+    const deltaY = anchorY - edgeY;
+    this.#nodeTooltip.style.setProperty('--anchor-line-x', `${anchorX < left ? 0 : width}px`);
+    this.#nodeTooltip.style.setProperty('--anchor-line-y', `${height / 2}px`);
+    this.#nodeTooltip.style.setProperty('--anchor-line-length', `${Math.hypot(deltaX, deltaY)}px`);
+    this.#nodeTooltip.style.setProperty('--anchor-line-angle', `${Math.atan2(deltaY, deltaX)}rad`);
+    this.#nodeTooltip.style.setProperty(
+      '--anchor-line-width',
+      `${Math.min(2, 0.85 + Math.hypot(deltaX, deltaY) / 220)}px`,
+    );
   }
 
   setStoredPeerCount(count: number): void {

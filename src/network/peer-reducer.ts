@@ -112,6 +112,7 @@ function reduceRecord(
         statusObservedAt: observation.observedAt,
         direction: observation.direction,
         transport: observation.transport,
+        ...(observation.relayPeerId === undefined ? {} : { relayPeerId: observation.relayPeerId }),
         source: observation.source ?? current?.source ?? 'browser',
         ...(observation.protocols === undefined ? {} : { protocols: observation.protocols }),
         ...(observation.agentVersion === undefined ? {} : { agentVersion: observation.agentVersion }),
@@ -241,6 +242,7 @@ function recordsEqual(left: PeerRecord, right: PeerRecord): boolean {
     left.lastSeenAt === right.lastSeenAt &&
     left.direction === right.direction &&
     left.transport === right.transport &&
+    left.relayPeerId === right.relayPeerId &&
     left.source === right.source &&
     sameStrings(left.protocols, right.protocols) &&
     left.agentVersion === right.agentVersion &&

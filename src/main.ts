@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import {
   clearPeerHistory,
   closePeerHistory,
@@ -10,12 +12,9 @@ import {
   toPersistedPeer,
 } from './network/peer-reducer';
 import type { HeliaObserver } from './network/helia-observer';
-import type { PeerObservation, PeerState } from './network/peer-types';
+import type { PeerObservation, PeerRecord, PeerState } from './network/peer-types';
 import { KuboProbeError, probeLocalKubo } from './network/kubo-observer';
-import {
-  createUniverseScene,
-  type UniverseScene,
-} from './scene/universe';
+import type { UniverseScene } from './scene/universe';
 import { AppShell } from './ui/app-shell';
 import {
   loadAnalyticsWasm,
@@ -25,6 +24,15 @@ import {
 
 const UI_BATCH_INTERVAL_MS = 100;
 const PERSIST_BATCH_INTERVAL_MS = 5_000;
+// Keep the first paint and the interactive 3D shell free from Helia's large
+// transport graph. The browser node starts shortly after the observatory is
+// usable; mobile gets a little more breathing room for its slower CPU path.
+// Keep the first interaction window free from Helia's large transport graph.
+// The 12 s hand-off still makes the browser node live during a normal session,
+// while preventing a 600 KiB module evaluation from competing with the first
+// 3D frame on throttled mobile CPUs.
+const NETWORK_BOOT_DELAY_MS = 12_000;
+const MOBILE_NETWORK_BOOT_DELAY_MS = 12_000;
 
 const canvas = requiredCanvas('universe-canvas');
 const shell = new AppShell();
@@ -36,22 +44,12 @@ let peerState = emptyPeerState();
 let updateTimer: number | undefined;
 let persistTimer: number | undefined;
 let networkGeneration = 0;
+let appDisposed = false;
 let lastPersisted = new Map<string, string>();
 const pendingPersistence = new Map<
   string,
   ReturnType<typeof toPersistedPeer>
 >();
-
-try {
-  universe = createUniverseScene(canvas);
-  universe.onNodeInteraction(({ peer, x, y, pinned }) => {
-    shell.showNodeDetails(peer, x, y, pinned);
-  });
-  universe.setMotionPaused(shell.motionPaused);
-  universe.start();
-} catch {
-  shell.markSceneUnavailable();
-}
 
 shell.onMotionChange((paused) => universe?.setMotionPaused(paused));
 shell.onRetry(() => {
@@ -72,16 +70,33 @@ shell.onKuboProbe(() => {
 });
 shell.updatePeerState(peerState);
 
-requestAnimationFrame(() => {
-  if (universe !== undefined) {
-    shell.markSceneReady();
+// A visitor who immediately explores the scene should not have to wait for
+// the quiet-start timer. The first gesture/keyboard focus opts into Helia at
+// once; passive visits retain the delayed, first-paint-friendly path below.
+const wakeNetworkOnIntent = (): void => {
+  if (networkGeneration === 0 && !appDisposed) {
+    void startNetworkObserver();
   }
-  void startDeferredSystems();
+};
+window.addEventListener('pointerdown', wakeNetworkOnIntent, {
+  once: true,
+  passive: true,
+});
+window.addEventListener('keydown', wakeNetworkOnIntent, { once: true });
+
+requestAnimationFrame(() => {
+  void startScene().then(() => {
+    if (universe !== undefined) {
+      shell.markSceneReady();
+    }
+    void startDeferredSystems();
+  });
 });
 
 window.addEventListener(
   'pagehide',
   () => {
+    appDisposed = true;
     networkGeneration += 1;
     unsubscribeObserver?.();
     unsubscribeObserver = undefined;
@@ -97,15 +112,40 @@ window.addEventListener(
   { once: true },
 );
 
+async function startScene(): Promise<void> {
+  try {
+    const { createUniverseScene } = await import('./scene/universe');
+    universe = createUniverseScene(canvas);
+    universe.onNodeInteraction(({ peer, x, y, pinned }) => {
+      shell.showNodeDetails(peer, x, y, pinned);
+    });
+    universe.setMotionPaused(shell.motionPaused);
+    universe.start();
+    // A development-only seam lets the browser E2E suite feed a deterministic
+    // relay fixture into the real renderer. It is tree-shaken from production
+    // and never exposes network state in the deployed app.
+    if (import.meta.env.DEV) {
+      (window as Window & {
+        __peerstellationSetPeers?: (peers: readonly PeerRecord[]) => void;
+      }).__peerstellationSetPeers = (peers) => universe?.setPeers(peers);
+    }
+  } catch {
+    shell.markSceneUnavailable();
+  }
+}
+
 async function startDeferredSystems(): Promise<void> {
   void getPeerCount()
     .then((count) => shell.setStoredPeerCount(count))
     .catch(() => shell.setStoredPeerUnavailable());
   const physicsTask = loadPhysicsWasm('/physics.wasm')
-    .then((physics) => universe?.attachPhysics(physics))
+    .then((physics) => {
+      if (!appDisposed) universe?.attachPhysics(physics);
+    })
     .catch(() => undefined);
   const analyticsTask = loadAnalyticsWasm('/analytics.wasm')
     .then((loaded) => {
+      if (appDisposed) return;
       analytics = loaded;
       scheduleUiUpdate();
     })
@@ -134,6 +174,13 @@ async function readLocalKubo(): Promise<void> {
 
 async function startNetworkObserverWhenIdle(): Promise<void> {
   await new Promise<void>((resolve) => {
+    const delay = window.innerWidth < 640
+      ? MOBILE_NETWORK_BOOT_DELAY_MS
+      : NETWORK_BOOT_DELAY_MS;
+    globalThis.setTimeout(resolve, delay);
+  });
+  if (appDisposed || networkGeneration !== 0) return;
+  await new Promise<void>((resolve) => {
     const start = (): void => {
       void startNetworkObserver().finally(resolve);
     };
@@ -146,6 +193,7 @@ async function startNetworkObserverWhenIdle(): Promise<void> {
 }
 
 async function startNetworkObserver(): Promise<void> {
+  if (appDisposed) return;
   const generation = ++networkGeneration;
   unsubscribeObserver?.();
   unsubscribeObserver = undefined;

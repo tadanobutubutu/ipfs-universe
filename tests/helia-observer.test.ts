@@ -112,6 +112,25 @@ describe('Helia observer', () => {
     expect(observations[0]).toMatchObject({ transport: 'webtransport' });
   });
 
+  it('retains an observed relay peer for evidence-backed relay edges', () => {
+    const observations = normalizeConnections(
+      [
+        connection('12D3KooWTarget', {
+          remoteAddr: {
+            toString: () =>
+              '/dns4/relay.example/tcp/443/wss/p2p/12D3KooWRelay/p2p-circuit/p2p/12D3KooWTarget',
+          },
+        }),
+      ],
+      1_500,
+    );
+
+    expect(observations[0]).toMatchObject({
+      transport: 'circuit-relay',
+      relayPeerId: '12D3KooWRelay',
+    });
+  });
+
   it('snapshots initial connections and keeps discovery distinct', async () => {
     const adapter = new FakeAdapter();
     adapter.connections = [connection('12D3KooWInitial')];

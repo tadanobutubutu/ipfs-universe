@@ -32,5 +32,16 @@ export default defineConfig({
     // Keep source maps out of the static deployment: the public repository is
     // the source of truth, and production should not ship several extra MB.
     sourcemap: false,
+    // The only larger assets are lazy, cacheable Three.js and Helia vendor
+    // chunks; neither blocks the first shell paint.
+    chunkSizeWarningLimit: 700,
+    rolldownOptions: {
+      output: {
+        // Keep the WebGL renderer out of the first shell chunk. The scene is
+        // imported after the first paint, so this cacheable vendor asset can
+        // be fetched in parallel with the initial shell.
+        manualChunks: (id) => id.includes('/node_modules/three/') ? 'three-vendor' : null,
+      },
+    },
   },
 });
