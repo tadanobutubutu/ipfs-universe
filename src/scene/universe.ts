@@ -122,6 +122,10 @@ class ThreeUniverseScene implements UniverseScene {
   #targetDistance = this.#distance;
   #pulseUntil = 0;
   #connectedPeerIds = new Set<string>();
+  // Reuse the projected interaction vector while a tooltip follows a moving
+  // node. Hovering a peer is a hot path; allocating a Vector3 per frame would
+  // create avoidable garbage-collection pauses on lower-end devices.
+  readonly #interactionWorld = new Vector3();
   #lastPerformanceSample = performance.now();
   #lastFrameTime = performance.now();
   #sampledFrames = 0;
@@ -686,7 +690,7 @@ class ThreeUniverseScene implements UniverseScene {
     const positions = this.#physicsPositions ?? this.#fallbackPositions;
     const offset = index * 3;
     if (offset + 2 >= positions.length) return undefined;
-    return new Vector3(
+    return this.#interactionWorld.set(
       positions[offset] ?? 0,
       positions[offset + 1] ?? 0,
       positions[offset + 2] ?? 0,
