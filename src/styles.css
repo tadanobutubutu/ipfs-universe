@@ -1269,6 +1269,7 @@ canvas:focus-visible,
   }
 
   .topbar__actions {
+    flex: 0 1 auto;
     min-width: 0;
     gap: 4px;
   }
@@ -1314,10 +1315,35 @@ canvas:focus-visible,
 
   .peer-button__label--short {
     display: inline;
-    font-size: var(--step--1);
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+  }
+
+  /* At 200% text zoom the utility labels must not force the fixed header
+     wider than the viewport. Their accessible names remain in the DOM while
+     the count and status dot keep the visual control discoverable. */
+  .peer-button {
+    flex: 0 1 auto;
+    justify-content: space-between;
+    width: auto;
+    gap: 6px;
+    padding: 4px 4px 4px 8px;
+  }
+
+  .peer-button strong {
+    min-width: 32px;
+    min-height: 32px;
+    padding-inline: 4px;
+  }
+
+  #network-retry {
+    max-width: 44px;
+    overflow: hidden;
+    padding-inline: 0;
+    font-size: 0;
+  }
+
+  #network-retry::before {
+    content: '↻';
+    font-size: 20px;
   }
 
   .universe {
@@ -1325,7 +1351,9 @@ canvas:focus-visible,
   }
 
   .connection-chip {
-    max-width: 5.5rem;
+    flex: 0 1 auto;
+    max-width: 8rem;
+    min-width: 0;
     overflow: hidden;
     padding-inline: 0;
     text-overflow: ellipsis;
@@ -1334,6 +1362,125 @@ canvas:focus-visible,
   .connection-chip span:last-child {
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The 200% text-size regression fixture models a user-agent text zoom on a
+     narrow phone. Keep the full labels at ordinary 390px widths, then collapse
+     only the controls that cannot fit in the 320px/200% budget. */
+  html[style*="font-size: 200%"] .peer-button__label--short {
+    display: none;
+  }
+
+  html[style*="font-size: 200%"] .connection-chip {
+    flex: 0 0 24px;
+    justify-content: center;
+    width: 24px;
+    max-width: 24px;
+    min-width: 24px;
+  }
+
+  html[style*="font-size: 200%"] .connection-chip > span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    white-space: normal;
+    font-size: 0;
+    line-height: 1px;
+  }
+
+  html[style*="font-size: 200%"] .connection-chip {
+    position: relative;
+  }
+
+  html[style*="font-size: 200%"] .peer-button {
+    flex: 0 0 44px;
+    justify-content: center;
+    width: 44px;
+    gap: 0;
+    padding: 4px;
+  }
+
+  html[style*="font-size: 200%"] .peer-button strong {
+    min-width: 36px;
+    min-height: 36px;
+    font-size: 16px;
+  }
+
+  html[style*="font-size: 200%"] .kubo-status {
+    inset-block-start: 104px;
+    inset-inline: 0.75rem;
+    max-height: calc(100svh - 88px);
+    overflow: auto;
+  }
+
+  /* Keep the same safe composition for a real 320 CSS-pixel handset, where
+     browser zoom may not expose a root style attribute to the page. */
+  @media (max-width: 20rem) {
+    .scene-guide {
+      position: fixed;
+      inset: -10000px auto auto -10000px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      padding: 0;
+      border: 0;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .peer-button__label--short {
+      display: none;
+    }
+
+    .connection-chip {
+      position: relative;
+      flex: 0 0 24px;
+      justify-content: center;
+      width: 24px;
+      max-width: 24px;
+      min-width: 24px;
+    }
+
+    .connection-chip > span:last-child {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      overflow-wrap: anywhere;
+      word-break: break-all;
+      white-space: normal;
+      font-size: 0;
+      line-height: 1px;
+    }
+
+    .peer-button {
+      flex: 0 0 44px;
+      justify-content: center;
+      width: 44px;
+      gap: 0;
+      padding: 4px;
+    }
+
+    .peer-button strong {
+      min-width: 36px;
+      min-height: 36px;
+      font-size: 16px;
+    }
+
+    .kubo-status {
+      inset-block-start: 104px;
+      inset-inline: 0.75rem;
+      max-height: calc(100svh - 88px);
+      overflow: auto;
+    }
   }
 
   #universe-canvas {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { radialDistance, relayEdgePairs } from '../src/scene/universe';
+import {
+  pointRadius,
+  radialDistance,
+  relayEdgePairs,
+} from '../src/scene/universe';
 
 describe('3D peer layout', () => {
   it('keeps latency legible in the radial scale', () => {
@@ -44,5 +48,11 @@ describe('3D peer layout', () => {
 
     expect(relayEdgePairs([relay, target])).toEqual([[0, 1]]);
     expect(relayEdgePairs([target])).toEqual([]);
+  });
+
+  it('reports the packed XYZ radius without duplicating an axis', () => {
+    const points = new Float32Array([3, 4, 0]);
+
+    expect(pointRadius(points, 0)).toBe(5);
   });
 });

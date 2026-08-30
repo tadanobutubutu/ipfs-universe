@@ -45,7 +45,7 @@
       </a>
 
       <div class="topbar__actions" role="group" aria-label="Observatory controls">
-        <span class="connection-chip">
+        <span class="connection-chip" role="status" aria-live="polite" aria-atomic="true">
           <i class="connection-chip__dot" aria-hidden="true"></i>
           <span id="header-network-state">Connecting</span>
         </span>
@@ -75,6 +75,7 @@
           id="peer-explorer-button"
           type="button"
           aria-haspopup="dialog"
+          aria-label="Open peer explorer, 0 connected peers"
         >
           <span class="peer-button__label peer-button__label--long">Open peer explorer</span>
           <span class="peer-button__label peer-button__label--short">Peers</span>

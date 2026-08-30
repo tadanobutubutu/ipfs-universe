@@ -91,6 +91,12 @@ Zig WebAssemblyはノード位置、速度、中心引力、反発、減衰、�
 
 Three.js自身はブラウザのWebGPU/WebGL APIを呼び出すJavaScriptライブラリであり、DOM/GPUコンテキストなしにRust/Zigだけで実行できません。そのため、Three.jsのシーン生成、GPUリソース管理、描画呼び出し、DOMイベントとアクセシビリティはTypeScriptに残し、WASMを数値カーネルとして厳密に境界付けています。描画は `WebGPURenderer` を第一候補にし、ブラウザがWebGPUを初期化できない場合は同じCanvas上でThree.jsのWebGL2バックエンドへ自動フォールバックします。現在のマテリアルは両バックエンドで利用できる組み込みマテリアルに限定し、WebGPU未対応の `ShaderMaterial` や `onBeforeCompile` へ依存しません。これは「Three.jsの処理を全部WASMにした」と偽装せず、ブラウザの実行モデルに沿った構成です。
 
+### 参考作品と独自性
+
+GPU手続き生成のシネマティック作品 [ABYSSAL / natural-disasters](https://github.com/Token-Gremlin/natural-disasters) の品質プリセット、動的な負荷計測、決定的な実機スクリーンショットという設計思想を参考にしました。Peerstellationのノード配置、到着演出、色、UI、WASM ABI、コード、シェーダー、文章、命名は独自に実装しており、参照リポジトリのソースは取り込んでいません。ABYSSALはMITライセンスで公開されていますが、Peerstellationの観測対象は実際に取得したHelia/libp2p情報だけに限定されます。
+
+品質は一方向の「軽量化」ではなく、120フレームのp95を基準に `cinema → balanced → efficient → still` を往復します。連続した負荷超過だけでピクセル比と星屑の描画数を下げ、十分な余裕が続けば一段ずつ戻します。新しいピアは discovery → ping → link → settle → reframe の段階を持ち、線分は `link` 以降だけを実測位置へ伸ばします。これらの状態はCanvasの診断属性にも残り、実機テストで視覚状態と計測値を同時に検証できます。
+
 ## 無料運用と収益化の境界
 
 静的配信は Cloudflare Workers Static Assets を既定にし、無料枠内の公開体験を維持します。広告、指紋採取、第三者トラッカーは入れません。支援導線は別リリースで GitHub Sponsors 等を設定できるようにし、運営費が必要になった場合だけ、次の順序で拡張します。

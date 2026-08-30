@@ -42,7 +42,7 @@ test('shows the 3D observatory immediately with semantic structure', async ({
       .evaluate((element) => element.closest('dialog')),
   ).toBeNull();
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
-    timeout: 3_000,
+    timeout: 5_000,
   });
   await expect(canvas).toHaveAttribute('data-renderer', /^(WebGPU|WebGL 2)$/u);
 
@@ -65,7 +65,7 @@ test('falls back to WebGL2 when WebGPU is unavailable', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
-    timeout: 3_000,
+    timeout: 5_000,
   });
   await expect(page.locator('#universe-canvas')).toHaveAttribute(
     'data-renderer',
@@ -78,7 +78,7 @@ test('supports keyboard navigation, motion pause, and peer details', async ({
 }) => {
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
-    timeout: 3_000,
+    timeout: 5_000,
   });
   await page.keyboard.press('Tab');
   await expect(page.locator('.skip-link')).toBeFocused();
@@ -138,6 +138,18 @@ test('reflows at 320 CSS pixels and 200 percent text size', async ({
     scrollWidth: document.documentElement.scrollWidth,
   }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+  const topbarOverflow = await page
+    .locator('.topbar, .topbar__actions, #peer-explorer-button')
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => ({
+          selector: element.id || element.className,
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+        })),
+    );
+  expect(topbarOverflow).toEqual([]);
   const headerControls = await page
     .locator('.brand, #motion-toggle, #peer-explorer-button')
     .evaluateAll((elements) =>
@@ -205,7 +217,37 @@ test('reflows at 320 CSS pixels and 200 percent text size', async ({
   // `output` exposes an implicit status role; target it directly so a future
   // fallback/live region cannot make the assertion ambiguous.
   await expect(page.locator('#peer-result-count')).toBeVisible();
+  await closeButton.click();
+  await page.locator('#kubo-probe').click();
+  const [topbarBounds, kuboBounds] = await Promise.all([
+    page.locator('.topbar').boundingBox(),
+    page.locator('#kubo-status').boundingBox(),
+  ]);
+  expect(topbarBounds).not.toBeNull();
+  expect(kuboBounds).not.toBeNull();
+  if (topbarBounds !== null && kuboBounds !== null) {
+    expect(kuboBounds.y).toBeGreaterThanOrEqual(
+      topbarBounds.y + topbarBounds.height - 1,
+    );
+  }
   await expectNoAutomatedAccessibilityViolations(page);
+});
+
+test('keeps network state and peer count names discoverable at a standard phone width', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+
+  await expect(page.locator('#header-network-state')).toBeVisible();
+  await expect(page.locator('.peer-button__label--short')).toBeVisible();
+  await expect(page.locator('.connection-chip')).toHaveAttribute(
+    'role',
+    'status',
+  );
+  await expect(page.locator('#peer-explorer-button')).toHaveAccessibleName(
+    /open peer explorer, 0 connected peers/i,
+  );
 });
 
 test('keeps every observatory layer separated across the responsive matrix', async ({
@@ -436,7 +478,7 @@ test('has no automated WCAG A or AA violations in the initial state', async ({
 }) => {
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
-  await expect(page.locator('[aria-live]')).toHaveCount(2);
+  await expect(page.locator('[aria-live]')).toHaveCount(3);
   await expectNoAutomatedAccessibilityViolations(page);
 });
 

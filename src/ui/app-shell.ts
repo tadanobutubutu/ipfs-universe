@@ -300,6 +300,10 @@ export class AppShell {
     );
     this.#observedMetric.textContent = formatInteger(state.totalCount);
     this.#peerCount.textContent = formatInteger(state.connectedCount);
+    this.#peerButton.setAttribute(
+      'aria-label',
+      `Open peer explorer, ${formatInteger(state.connectedCount)} connected peers`,
+    );
     this.#latencyMetric.textContent =
       analytics === undefined || analytics.latencySamples === 0
         ? '—'
