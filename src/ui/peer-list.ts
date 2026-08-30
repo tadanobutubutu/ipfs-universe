@@ -125,11 +125,7 @@ function createPeerItem(peer: PeerRecord): HTMLLIElement {
       'relay',
       peer.relayPeerId === undefined ? 'Not observed' : peer.relayPeerId,
     ),
-    detail(
-      'Source',
-      'source',
-      peer.source === 'kubo' ? 'Local Kubo' : 'Browser Helia',
-    ),
+    detail('Source', 'source', sourceLabel(peer.source)),
     detail('Latency', 'latency-detail', latencyLabel(peer.latencyMs)),
     observedTimeDetail('Last observed', 'last-seen', peer.lastSeenAt),
   );
@@ -153,6 +149,7 @@ function updatePeerItem(
   item.dataset.peerId = peer.peerId;
   const button = requiredDescendant<HTMLButtonElement>(item, '.peer-row');
   button.dataset.status = peer.status;
+  button.dataset.source = peer.source ?? 'browser';
   button.dataset.peerId = peer.peerId;
   button.dataset.latency =
     peer.latencyMs === undefined ? '' : String(peer.latencyMs);
@@ -186,8 +183,9 @@ function updatePeerItem(
       : String(peer.addressCount);
   requiredField<HTMLElement>(item, 'relay').textContent =
     peer.relayPeerId ?? 'Not observed';
-  requiredField<HTMLElement>(item, 'source').textContent =
-    peer.source === 'kubo' ? 'Local Kubo' : 'Browser Helia';
+  requiredField<HTMLElement>(item, 'source').textContent = sourceLabel(
+    peer.source,
+  );
   requiredField<HTMLElement>(item, 'latency-detail').textContent = latencyLabel(
     peer.latencyMs,
   );
@@ -305,6 +303,12 @@ function statusLabel(status: PeerRecord['status']): string {
     case 'disconnected':
       return 'Disconnected';
   }
+}
+
+function sourceLabel(source: PeerRecord['source']): string {
+  if (source === 'kubo') return 'Local Kubo';
+  if (source === 'both') return 'Browser Helia + Local Kubo';
+  return 'Browser Helia';
 }
 
 function latencyLabel(latencyMs: number | undefined): string {

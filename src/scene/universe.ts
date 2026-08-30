@@ -2,6 +2,7 @@ import {
   ACESFilmicToneMapping,
   AdditiveBlending,
   BackSide,
+  type Blending,
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
@@ -19,6 +20,8 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
+  NormalBlending,
+  OctahedronGeometry,
   PerspectiveCamera,
   Points,
   PointsMaterial,
@@ -51,10 +54,11 @@ import {
 import { frameElapsedMs, simulationDeltaSeconds } from './frame-stats';
 import { QualityPolicy } from './quality-policy';
 
-const SCENE_NODE_LIMIT = 512;
+const SCENE_NODE_LIMIT = 1_024;
 const MAX_EXPECTED_DRAW_CALLS_PER_FRAME = 128;
 const CONNECTED_COLOR = new Color(0xc9ff70);
-const DISCOVERED_COLOR = new Color(0xa897ff);
+const DISCOVERED_COLOR = new Color(0xc2b4ff);
+const KUBO_COLOR = new Color(0x7f949b);
 const EDGE_COLOR = new Color(0x9fffe3);
 const PULSE_COLOR = new Color(0x73fbd3);
 
@@ -113,6 +117,9 @@ class ThreeUniverseScene implements UniverseScene {
   readonly #pulseRing: Mesh<TorusGeometry, MeshBasicMaterial>;
   readonly #connectedPeerMesh: InstancedMesh;
   readonly #discoveredPeerMesh: InstancedMesh;
+  readonly #kuboPeerMesh: InstancedMesh;
+  readonly #kuboOrbit: Mesh<TorusGeometry, MeshBasicMaterial>;
+  readonly #edges: LineSegments;
   readonly #edgeGeometry: BufferGeometry;
   // Reserve one center edge and one evidence-backed relay edge per visible
   // peer. Unknown remote topology is intentionally never inferred.
@@ -192,7 +199,10 @@ class ThreeUniverseScene implements UniverseScene {
     this.#pixelRatio = this.#basePixelRatio;
     const mobileQuality = window.innerWidth < 640;
     this.#mobileQuality = mobileQuality;
-    this.#coreScale = mobileQuality ? 1.8 : 1.7;
+    // The core is the visual anchor even when a Kubo import fills the outer
+    // field. Keep it large enough to read as the observatory, without letting
+    // it collide with the first browser ring on a phone.
+    this.#coreScale = mobileQuality ? 1.9 : 2.0;
     this.#pulseBaseScale = mobileQuality ? 1.1 : this.#coreScale;
     this.#pulseExpansion = mobileQuality ? 1.2 : 4.8;
     this.#renderer.setClearColor(0x050508, 0);
@@ -201,7 +211,10 @@ class ThreeUniverseScene implements UniverseScene {
     this.#renderer.toneMapping = ACESFilmicToneMapping;
     this.#renderer.toneMappingExposure = 1.05;
 
-    this.#scene.fog = new FogExp2(0x050508, 0.008);
+    // Keep the deep Kubo field readable on portrait screens. The exponential
+    // fog still gives distant peers depth, but 0.008 erased a 180-unit mobile
+    // composition almost completely.
+    this.#scene.fog = new FogExp2(0x050508, 0.0035);
     this.#dust = createDecorativeDust(mobileQuality ? 480 : 2_400);
     // Mobile keeps the CSS sky and low-poly core as the first composition;
     // revealing the 2,400-point dust field later would spend the first input
@@ -218,8 +231,26 @@ class ThreeUniverseScene implements UniverseScene {
     this.#scene.add(this.#pulseRing);
 
     this.#connectedPeerMesh = createPeerMesh(mobileQuality, CONNECTED_COLOR);
-    this.#discoveredPeerMesh = createPeerMesh(mobileQuality, DISCOVERED_COLOR);
-    this.#scene.add(this.#connectedPeerMesh, this.#discoveredPeerMesh);
+    this.#discoveredPeerMesh = createPeerMesh(mobileQuality, DISCOVERED_COLOR, {
+      opacity: 0.98,
+      radius: mobileQuality ? 0.48 : 0.46,
+    });
+    this.#kuboPeerMesh = createPeerMesh(mobileQuality, KUBO_COLOR, {
+      blending: NormalBlending,
+      geometry: 'octahedron',
+      opacity: mobileQuality ? 0.78 : 0.68,
+      radius: mobileQuality ? 0.72 : 0.56,
+    });
+    this.#kuboOrbit = createKuboOrbit(mobileQuality);
+    this.#connectedPeerMesh.visible = false;
+    this.#discoveredPeerMesh.visible = false;
+    this.#kuboPeerMesh.visible = false;
+    this.#scene.add(
+      this.#connectedPeerMesh,
+      this.#discoveredPeerMesh,
+      this.#kuboPeerMesh,
+      this.#kuboOrbit,
+    );
     this.#edgeGeometry = new BufferGeometry();
     this.#edgeGeometry.setAttribute(
       'position',
@@ -240,6 +271,8 @@ class ThreeUniverseScene implements UniverseScene {
     edgeMaterial.toneMapped = false;
     edgeMaterial.fog = false;
     const edges = new LineSegments(this.#edgeGeometry, edgeMaterial);
+    edges.visible = false;
+    this.#edges = edges;
     this.#scene.add(edges);
 
     this.#resizeObserver = new ResizeObserver(() => this.#resize());
@@ -284,21 +317,16 @@ class ThreeUniverseScene implements UniverseScene {
 
   setPeers(peers: readonly PeerRecord[]): void {
     const previousPeerIds = new Set(this.#peers.map(({ peerId }) => peerId));
-    const visible = peers
-      .filter(({ status }) => status !== 'disconnected')
-      .sort((left, right) => left.peerId.localeCompare(right.peerId))
-      .slice(0, SCENE_NODE_LIMIT);
+    const visible = prioritizeScenePeers(peers, SCENE_NODE_LIMIT);
     const signature = visible
       .map(
-        ({ peerId, status, latencyMs, transport, relayPeerId }) =>
-          `${peerId}:${status}:${transport ?? 'unknown'}:${latencyMs === undefined ? 'unmeasured' : Math.round(latencyMs / 25)}:${relayPeerId ?? ''}`,
+        ({ peerId, status, source, latencyMs, transport, relayPeerId }) =>
+          `${peerId}:${status}:${source ?? 'browser'}:${transport ?? 'unknown'}:${latencyMs === undefined ? 'unmeasured' : Math.round(latencyMs / 25)}:${relayPeerId ?? ''}`,
       )
       .join('|');
     const identityChanged = signature !== this.#peerSignature;
     const connectedPeerIds = new Set(
-      visible
-        .filter(({ status }) => status === 'connected')
-        .map(({ peerId }) => peerId),
+      visible.filter(isBrowserLivePeer).map(({ peerId }) => peerId),
     );
     const connectionChanged =
       connectedPeerIds.size !== this.#connectedPeerIds.size ||
@@ -332,15 +360,28 @@ class ThreeUniverseScene implements UniverseScene {
       this.#keyboardIndex = undefined;
     }
     this.#peerSignature = signature;
-    this.#connectedPeerMesh.count = visible.filter(
-      ({ status }) => status === 'connected',
-    ).length;
+    this.#core.scale.setScalar(
+      coreScaleForPeerCount(this.#coreScale, visible.length),
+    );
+    this.#connectedPeerMesh.count = visible.filter(isBrowserLivePeer).length;
+    this.#connectedPeerMesh.visible = this.#connectedPeerMesh.count > 0;
+    this.#kuboPeerMesh.count = visible.filter(isKuboObservedPeer).length;
+    this.#kuboPeerMesh.visible = this.#kuboPeerMesh.count > 0;
+    this.#kuboOrbit.visible = this.#kuboPeerMesh.count > 0;
     this.#discoveredPeerMesh.count = visible.filter(
-      ({ status }) => status !== 'connected',
+      (peer) => !isBrowserLivePeer(peer) && !isKuboObservedPeer(peer),
     ).length;
+    this.#discoveredPeerMesh.visible = this.#discoveredPeerMesh.count > 0;
+    this.#canvas.dataset.browserNodeCount = String(
+      this.#connectedPeerMesh.count,
+    );
+    this.#canvas.dataset.kuboNodeCount = String(this.#kuboPeerMesh.count);
+    this.#canvas.dataset.discoveredNodeCount = String(
+      this.#discoveredPeerMesh.count,
+    );
 
     if (identityChanged) {
-      this.#fallbackPositions = fallbackPositions(visible);
+      this.#fallbackPositions = fallbackPositions(visible, this.#mobileQuality);
       this.#seedPhysics();
       this.#autoFrameEnabled = true;
       this.#updateAutoFraming();
@@ -499,7 +540,7 @@ class ThreeUniverseScene implements UniverseScene {
       physics.seedNode(
         index,
         hashPeerId(peer.peerId),
-        radialDistance(peer),
+        sceneRadialDistance(peer, this.#mobileQuality),
         transportSector(peer.transport),
       );
     });
@@ -516,12 +557,13 @@ class ThreeUniverseScene implements UniverseScene {
     this.#peers.slice(0, physics.maxNodes).forEach((peer, index) => {
       physics.setPeerMetadata(
         index,
-        peer.status,
+        isEvidenceConnectedPeer(peer) ? 'connected' : 'discovered',
         peer.latencyMs,
         peer.relayPeerId === undefined
           ? -1
           : (peerIndices.get(peer.relayPeerId) ?? -1),
       );
+      physics.setPeerSource(index, peer.source);
     });
   }
 
@@ -570,6 +612,10 @@ class ThreeUniverseScene implements UniverseScene {
       }
       this.#core.rotation.y += delta * 0.09;
       this.#core.rotation.x += delta * 0.025;
+      if (this.#kuboOrbit.visible) {
+        this.#kuboOrbit.rotation.y += delta * 0.012;
+        this.#kuboOrbit.rotation.z -= delta * 0.006;
+      }
       this.#dust.rotation.y -= delta * 0.004;
     }
     this.#updatePulse(frameTime);
@@ -650,18 +696,23 @@ class ThreeUniverseScene implements UniverseScene {
     let edgeCount = 0;
     let connectedIndex = 0;
     let discoveredIndex = 0;
+    let kuboIndex = 0;
 
     this.#peers.forEach((peer, index) => {
       const offset = index * 3;
       const x = positions[offset] ?? 0;
       const y = positions[offset + 1] ?? 0;
       const z = positions[offset + 2] ?? 0;
-      const scale =
-        peer.status === 'connected'
-          ? peer.latencyMs === undefined
-            ? 1
-            : 1.16
-          : 0.76;
+      const browserLive = isBrowserLivePeer(peer);
+      const scale = browserLive
+        ? peer.latencyMs === undefined
+          ? 1
+          : 1.16
+        : isKuboObservedPeer(peer)
+          ? this.#mobileQuality
+            ? 1.08
+            : 0.92
+          : 0.92;
       const emphasis =
         index === this.#selectedIndex
           ? 1.42
@@ -676,21 +727,27 @@ class ThreeUniverseScene implements UniverseScene {
         scale * emphasis * arrivalEmphasis,
       );
       this.#matrix.setPosition(x, y, z);
-      const peerMesh =
-        peer.status === 'connected'
-          ? this.#connectedPeerMesh
+      const peerMesh = browserLive
+        ? this.#connectedPeerMesh
+        : isKuboObservedPeer(peer)
+          ? this.#kuboPeerMesh
           : this.#discoveredPeerMesh;
-      const meshIndex =
-        peer.status === 'connected' ? connectedIndex++ : discoveredIndex++;
+      const meshIndex = browserLive
+        ? connectedIndex++
+        : isKuboObservedPeer(peer)
+          ? kuboIndex++
+          : discoveredIndex++;
       peerMesh.setMatrixAt(meshIndex, this.#matrix);
 
-      if (this.#physics === undefined && peer.status === 'connected') {
+      if (this.#physics === undefined && browserLive) {
         const linkProgress =
           arrival === undefined ? 1 : arrivalLinkProgress(arrival);
         const edgeOffset = edgeCount * 6;
-        this.#edgePositions[edgeOffset] = 0;
-        this.#edgePositions[edgeOffset + 1] = 0;
-        this.#edgePositions[edgeOffset + 2] = 0;
+        const length = Math.hypot(x, y, z);
+        const surfaceScale = length > 3.2 ? 3.2 / length : 0;
+        this.#edgePositions[edgeOffset] = x * surfaceScale;
+        this.#edgePositions[edgeOffset + 1] = y * surfaceScale;
+        this.#edgePositions[edgeOffset + 2] = z * surfaceScale;
         this.#edgePositions[edgeOffset + 3] = x * linkProgress;
         this.#edgePositions[edgeOffset + 4] = y * linkProgress;
         this.#edgePositions[edgeOffset + 5] = z * linkProgress;
@@ -745,11 +802,13 @@ class ThreeUniverseScene implements UniverseScene {
 
     this.#connectedPeerMesh.instanceMatrix.needsUpdate = true;
     this.#discoveredPeerMesh.instanceMatrix.needsUpdate = true;
+    this.#kuboPeerMesh.instanceMatrix.needsUpdate = true;
     const edgeAttribute = this.#edgeGeometry.getAttribute('position');
     edgeAttribute.needsUpdate = true;
     const edgeColorAttribute = this.#edgeGeometry.getAttribute('color');
     edgeColorAttribute.needsUpdate = true;
     this.#edgeGeometry.setDrawRange(0, edgeCount * 2);
+    this.#edges.visible = edgeCount > 0;
     this.#canvas.dataset.edgeSegments = String(edgeCount);
     // Keep the measured radial signal inspectable for browser QA without
     // putting diagnostics into the visible HUD. This is also useful when a
@@ -866,7 +925,21 @@ class ThreeUniverseScene implements UniverseScene {
   #updateAutoFraming(): void {
     if (!this.#autoFrameEnabled || this.#peers.length === 0) return;
     const positions = this.#physicsPositions ?? this.#fallbackPositions;
-    const radius = fitCompositionRadius(positions);
+    const framingPeers = selectFramingPeers(this.#peers);
+    const indices = new Map(
+      this.#peers.map((peer, index) => [peer.peerId, index] as const),
+    );
+    const framingPositions = new Float32Array(framingPeers.length * 3);
+    framingPeers.forEach((peer, frameIndex) => {
+      const sourceIndex = indices.get(peer.peerId);
+      if (sourceIndex === undefined) return;
+      const sourceOffset = sourceIndex * 3;
+      const targetOffset = frameIndex * 3;
+      framingPositions[targetOffset] = positions[sourceOffset] ?? 0;
+      framingPositions[targetOffset + 1] = positions[sourceOffset + 1] ?? 0;
+      framingPositions[targetOffset + 2] = positions[sourceOffset + 2] ?? 0;
+    });
+    const radius = fitCompositionRadius(framingPositions);
     if (radius <= 0) return;
     const padding = this.#camera.aspect < 0.72 ? 1.08 : 1.04;
     const fittedDistance = fitPerspectiveDistance(
@@ -885,13 +958,22 @@ class ThreeUniverseScene implements UniverseScene {
   #revealWasmEdges(edgeCount: number): void {
     let edgeIndex = 0;
     for (const peer of this.#peers) {
-      if (peer.status !== 'connected') continue;
+      if (!isBrowserLivePeer(peer)) continue;
       const arrival = this.#arrivals.get(peer.peerId);
       const progress = arrival === undefined ? 1 : arrivalLinkProgress(arrival);
       const offset = edgeIndex * 6;
-      this.#edgePositions[offset + 3] *= progress;
-      this.#edgePositions[offset + 4] *= progress;
-      this.#edgePositions[offset + 5] *= progress;
+      const startX = this.#edgePositions[offset] ?? 0;
+      const startY = this.#edgePositions[offset + 1] ?? 0;
+      const startZ = this.#edgePositions[offset + 2] ?? 0;
+      this.#edgePositions[offset + 3] =
+        startX +
+        ((this.#edgePositions[offset + 3] ?? startX) - startX) * progress;
+      this.#edgePositions[offset + 4] =
+        startY +
+        ((this.#edgePositions[offset + 4] ?? startY) - startY) * progress;
+      this.#edgePositions[offset + 5] =
+        startZ +
+        ((this.#edgePositions[offset + 5] ?? startZ) - startZ) * progress;
       edgeIndex += 1;
     }
     for (const [relayIndex, peerIndex] of this.#relayPairs) {
@@ -985,6 +1067,7 @@ class ThreeUniverseScene implements UniverseScene {
     this.#canvas.dataset.frameMax = frameStats.max.toFixed(2);
     const qualityDecision = this.#qualityPolicy.observe({
       frameP95Ms: frameStats.p95,
+      frameMaxMs: frameStats.max,
     });
     this.#canvas.dataset.qualityTier = qualityDecision.tier;
     if (qualityDecision.changed) {
@@ -1010,8 +1093,15 @@ class ThreeUniverseScene implements UniverseScene {
         ? drawCallDelta / Math.max(1, this.#sampledFrames)
         : infoDrawCalls;
     this.#lastInfoDrawCalls = infoDrawCalls;
+    const visibleRenderables = countVisibleRenderables(this.#scene);
+    // WebGPU's info counter is backend-dependent and currently reports only
+    // part of the render graph. Keep both values: drawCalls is a conservative
+    // scene budget, gpuDrawCalls is the raw backend counter for diagnostics.
+    this.#canvas.dataset.gpuDrawCalls = String(
+      Math.max(0, Math.round(infoDrawCalls)),
+    );
     this.#canvas.dataset.drawCalls = String(
-      Math.max(0, Math.round(drawCallsPerFrame)),
+      Math.max(visibleRenderables, Math.round(drawCallsPerFrame)),
     );
     this.#canvas.dataset.drawCallMode = 'per-frame-average';
     this.#canvas.dataset.sceneObjects = String(this.#scene.children.length);
@@ -1368,6 +1458,31 @@ function createPulseRing(
   return ring;
 }
 
+function createKuboOrbit(
+  mobileQuality = false,
+): Mesh<TorusGeometry, MeshBasicMaterial> {
+  const material = new MeshBasicMaterial({
+    blending: NormalBlending,
+    color: KUBO_COLOR,
+    depthWrite: false,
+    opacity: mobileQuality ? 0.12 : 0.18,
+    transparent: true,
+  });
+  material.toneMapped = false;
+  const orbit = new Mesh(
+    new TorusGeometry(
+      mobileQuality ? 38 : 62,
+      0.055,
+      4,
+      mobileQuality ? 56 : 96,
+    ),
+    material,
+  );
+  orbit.rotation.set(Math.PI * 0.48, 0.34, -0.2);
+  orbit.visible = false;
+  return orbit;
+}
+
 function createObserverCore(group: Group, mobileQuality = false): void {
   const shellGeometry = new IcosahedronGeometry(3, mobileQuality ? 1 : 2);
   const shell = new Mesh(
@@ -1439,13 +1554,22 @@ function createObserverCore(group: Group, mobileQuality = false): void {
 export function createPeerMesh(
   mobileQuality = false,
   color = new Color(0xffffff),
+  options: {
+    blending?: Blending;
+    geometry?: 'icosahedron' | 'octahedron';
+    opacity?: number;
+    radius?: number;
+  } = {},
 ): InstancedMesh {
-  const geometry = new IcosahedronGeometry(0.42, mobileQuality ? 0 : 1);
+  const geometry =
+    options.geometry === 'octahedron'
+      ? new OctahedronGeometry(options.radius ?? 0.5, 0)
+      : new IcosahedronGeometry(options.radius ?? 0.42, mobileQuality ? 0 : 1);
   const material = new MeshBasicMaterial({
     color,
     transparent: true,
-    opacity: 0.92,
-    blending: AdditiveBlending,
+    opacity: options.opacity ?? 0.92,
+    blending: options.blending ?? AdditiveBlending,
     depthWrite: false,
   });
   material.toneMapped = false;
@@ -1455,11 +1579,14 @@ export function createPeerMesh(
   return mesh;
 }
 
-function fallbackPositions(peers: readonly PeerRecord[]): Float32Array {
+function fallbackPositions(
+  peers: readonly PeerRecord[],
+  mobileQuality = false,
+): Float32Array {
   const positions = new Float32Array(peers.length * 3);
   peers.forEach((peer, index) => {
     const seed = hashPeerId(peer.peerId) >>> 0;
-    const radius = radialDistance(peer);
+    const radius = sceneRadialDistance(peer, mobileQuality);
     // Isotropic sphere: transport is shown in the node details, not used to
     // bunch every peer into a single sector. The peer id keeps positions stable
     // between renders while still giving the scene a full 3D spread.
@@ -1476,8 +1603,11 @@ function fallbackPositions(peers: readonly PeerRecord[]): Float32Array {
 
 export function radialDistance(peer: PeerRecord): number {
   const seed = unitFromInteger(hashPeerId(peer.peerId) ^ 0xa53c9e17);
+  if (peer.source === 'kubo') {
+    return 52 + seed * 20;
+  }
   if (peer.status === 'discovered') {
-    return 22 + seed * 12;
+    return 30 + seed * 10;
   }
   if (peer.latencyMs === undefined) {
     return 18 + seed * 14;
@@ -1490,6 +1620,25 @@ export function radialDistance(peer: PeerRecord): number {
   // peer while preserving a small, deterministic spread at each latency.
   const base = 8 + MathUtils.clamp(normalized, 0, 1) * 42;
   return base * (0.9 + seed * 0.2);
+}
+
+/** Give the observatory core a small density response without changing its
+ * role as the stable visual anchor of the composition. */
+export function coreScaleForPeerCount(
+  baseScale: number,
+  peerCount: number,
+): number {
+  const safeBase = Number.isFinite(baseScale) ? Math.max(0.1, baseScale) : 1;
+  const safeCount = Number.isFinite(peerCount) ? Math.max(0, peerCount) : 0;
+  return safeBase + Math.min(0.4, safeCount / 2_500);
+}
+
+function sceneRadialDistance(peer: PeerRecord, mobileQuality: boolean): number {
+  if (mobileQuality && peer.source === 'kubo') {
+    const seed = unitFromInteger(hashPeerId(peer.peerId) ^ 0xa53c9e17);
+    return 30 + seed * 12;
+  }
+  return radialDistance(peer);
 }
 
 export function pointRadius(points: ArrayLike<number>, offset: number): number {
@@ -1513,9 +1662,12 @@ export function relayEdgePairs(
   const pairs: Array<readonly [number, number]> = [];
   const seenEdges = new Set<string>();
   peers.forEach((peer, index) => {
-    if (peer.status !== 'connected' || peer.relayPeerId === undefined) return;
+    if (!isEvidenceConnectedPeer(peer) || peer.relayPeerId === undefined)
+      return;
     const relayIndex = peerIndices.get(peer.relayPeerId);
     if (relayIndex === undefined || relayIndex === index) return;
+    const relay = peers[relayIndex];
+    if (relay === undefined || !isEvidenceConnectedPeer(relay)) return;
     const edgeKey =
       relayIndex < index ? `${relayIndex}:${index}` : `${index}:${relayIndex}`;
     if (seenEdges.has(edgeKey)) return;
@@ -1523,6 +1675,56 @@ export function relayEdgePairs(
     pairs.push([relayIndex, index]);
   });
   return pairs;
+}
+
+/** A line to the center is only valid for the browser's own live node. */
+export function isBrowserLivePeer(peer: PeerRecord): boolean {
+  return peer.status === 'connected' && peer.source !== 'kubo';
+}
+
+/** Local Kubo observations are real, but belong to a different process. */
+export function isKuboObservedPeer(peer: PeerRecord): boolean {
+  return (
+    peer.status === 'connected' &&
+    (peer.source === 'kubo' || peer.source === 'both')
+  );
+}
+
+function isEvidenceConnectedPeer(peer: PeerRecord): boolean {
+  return isBrowserLivePeer(peer) || isKuboObservedPeer(peer);
+}
+
+export function prioritizeScenePeers(
+  peers: readonly PeerRecord[],
+  limit: number,
+): readonly PeerRecord[] {
+  const safeLimit = Math.max(0, Math.trunc(limit));
+  return peers
+    .filter(({ status }) => status !== 'disconnected')
+    .sort(
+      (left, right) =>
+        scenePriority(left) - scenePriority(right) ||
+        right.lastSeenAt - left.lastSeenAt ||
+        left.peerId.localeCompare(right.peerId),
+    )
+    .slice(0, safeLimit);
+}
+
+export function selectFramingPeers(
+  peers: readonly PeerRecord[],
+): readonly PeerRecord[] {
+  // Frame the complete observed field. `fitCompositionRadius` deliberately
+  // uses a robust percentile plus a bounded furthest-point contribution, so a
+  // large Kubo import remains visible without turning the browser core into a
+  // single pixel. Excluding Kubo here made a successful import disappear
+  // beyond the perspective frustum.
+  return peers.filter(({ status }) => status !== 'disconnected');
+}
+
+function scenePriority(peer: PeerRecord): number {
+  if (isBrowserLivePeer(peer)) return 0;
+  if (isKuboObservedPeer(peer)) return 1;
+  return 2;
 }
 
 function edgeBrightness(latencyMs: number | undefined): number {
@@ -1568,6 +1770,21 @@ function xorshift(input: number): number {
 
 function unitFromInteger(value: number): number {
   return (value >>> 0) / 0xffffffff;
+}
+
+function countVisibleRenderables(scene: Scene): number {
+  let count = 0;
+  scene.traverseVisible((object) => {
+    if (
+      object.type === 'Mesh' ||
+      object.type === 'Line' ||
+      object.type === 'LineSegments' ||
+      object.type === 'Points'
+    ) {
+      count += 1;
+    }
+  });
+  return count;
 }
 
 function disposeMaterial(material: Material | Material[]): void {

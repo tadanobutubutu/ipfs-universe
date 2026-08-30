@@ -1,14 +1,15 @@
 const std = @import("std");
 
-const max_node_count: usize = 512;
+const max_node_count: usize = 1024;
 const vector_width: usize = 3;
 const edge_width: usize = vector_width * 2;
 const max_edge_count: usize = max_node_count * 2;
 const edge_component_count: usize = max_edge_count * edge_width;
 const relay_edge_seen_count: usize = max_node_count * max_node_count;
-const boundary_radius: f32 = 52.0;
+const boundary_radius: f32 = 76.0;
 const repulsion_radius: f32 = 7.5;
 const connected_status: i32 = 1;
+const kubo_source: i32 = 1;
 const no_relay: i32 = -1;
 const edge_red: f32 = 0.6235294;
 const edge_green: f32 = 1.0;
@@ -20,6 +21,7 @@ var velocities: [max_node_count * vector_width]f32 = [_]f32{0} ** (max_node_coun
 var peer_status: [max_node_count]i32 = [_]i32{0} ** max_node_count;
 var peer_latency: [max_node_count]f32 = [_]f32{-1.0} ** max_node_count;
 var peer_relay_index: [max_node_count]i32 = [_]i32{no_relay} ** max_node_count;
+var peer_source: [max_node_count]i32 = [_]i32{0} ** max_node_count;
 var edge_positions: [edge_component_count]f32 = [_]f32{0} ** edge_component_count;
 var edge_colors: [edge_component_count]f32 = [_]f32{0} ** edge_component_count;
 var relay_edges_seen: [relay_edge_seen_count]bool = [_]bool{false} ** relay_edge_seen_count;
@@ -38,6 +40,7 @@ export fn init_system(requested_count: i32) void {
     @memset(peer_status[0..], 0);
     @memset(peer_latency[0..], -1.0);
     @memset(peer_relay_index[0..], no_relay);
+    @memset(peer_source[0..], 0);
     @memset(edge_positions[0..], 0);
     @memset(edge_colors[0..], 0);
     @memset(relay_edges_seen[0..], false);
@@ -52,7 +55,7 @@ export fn seed_node(requested_index: i32, requested_seed: i32, requested_radius:
 
     const seed: u32 = @bitCast(requested_seed);
     const indexed_seed = seed +% (@as(u32, @intCast(index)) *% 0x9e3779b9);
-    const radius = if (std.math.isFinite(requested_radius)) std.math.clamp(requested_radius, 8.0, 44.0) else 40.0;
+    const radius = if (std.math.isFinite(requested_radius)) std.math.clamp(requested_radius, 8.0, 76.0) else 40.0;
     // A uniform sphere keeps arrivals visually distributed in every direction.
     // The transport sector is metadata, not a fake topology signal.
     _ = requested_sector;
@@ -161,9 +164,19 @@ export fn set_peer_metadata(
         no_relay;
 }
 
+/// Mark whether a connected record came from the browser node or the
+/// separately imported local Kubo daemon. This keeps Kubo out of center lines
+/// while still allowing evidence-backed Kubo relay edges.
+export fn set_peer_source(requested_index: i32, source: i32) void {
+    if (requested_index < 0) return;
+    const index: usize = @intCast(requested_index);
+    if (index >= active_count or index >= max_node_count) return;
+    peer_source[index] = if (source == kubo_source) kubo_source else 0;
+}
+
 /// Build all evidence-backed line segments from the current WASM positions.
-/// The first endpoint of a center edge is the local browser node at (0,0,0).
-/// Relay edges are emitted once, only when both endpoint records are present.
+/// The first endpoint of a center edge is the surface of the local browser
+/// core. Relay edges are emitted once, only when both endpoint records are present.
 export fn layout_edges(requested_count: i32) void {
     const count = @min(active_count, clampedCount(requested_count));
     rendered_edge_count = 0;
@@ -171,12 +184,18 @@ export fn layout_edges(requested_count: i32) void {
 
     var index: usize = 0;
     while (index < count) : (index += 1) {
-        if (peer_status[index] != connected_status) continue;
+        if (peer_status[index] != connected_status or peer_source[index] == kubo_source) continue;
         const offset = index * vector_width;
+        const distance = @sqrt(
+            positions[offset] * positions[offset] +
+                positions[offset + 1] * positions[offset + 1] +
+                positions[offset + 2] * positions[offset + 2],
+        );
+        const surface_scale = if (distance > 3.2) 3.2 / distance else 0.0;
         write_edge(
-            0.0,
-            0.0,
-            0.0,
+            positions[offset] * surface_scale,
+            positions[offset + 1] * surface_scale,
+            positions[offset + 2] * surface_scale,
             positions[offset],
             positions[offset + 1],
             positions[offset + 2],

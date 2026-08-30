@@ -34,10 +34,25 @@ describe('typed WASM loaders', () => {
     const initialBuffer = positions.buffer;
     physics.step(1 / 60, 2, 1);
 
-    expect(physics.maxNodes).toBe(512);
+    expect(physics.maxNodes).toBe(1_024);
     expect(positions).toHaveLength(6);
     expect(positions.buffer).toBe(initialBuffer);
     expect([...positions].every(Number.isFinite)).toBe(true);
+  });
+
+  it('preserves the wide Kubo outer orbit in the WASM boundary', async () => {
+    const bytes = await readFile('public/physics.wasm');
+    const physics = await loadPhysicsWasm(
+      '/physics.wasm',
+      bytesFetcher(Uint8Array.from(bytes), 'application/wasm'),
+    );
+
+    physics.initialize(1);
+    physics.seedNode(0, 11, 72, 0);
+    const position = physics.positions(1);
+    expect(
+      Math.hypot(position[0] ?? 0, position[1] ?? 0, position[2] ?? 0),
+    ).toBeCloseTo(72, 3);
   });
 
   it('exposes the Zig edge-layout buffer without a per-frame copy', async () => {

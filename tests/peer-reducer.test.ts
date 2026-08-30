@@ -55,6 +55,50 @@ describe('peer observation reducer', () => {
       status: 'connected',
       transport: 'webrtc',
     });
+    expect(state.browserConnectedCount).toBe(1);
+    expect(state.kuboConnectedCount).toBe(0);
+  });
+
+  it('keeps local Kubo connections out of the browser-live count', () => {
+    const state = reduce([
+      {
+        type: 'connected',
+        peerId: '12D3KooWKuboObserved',
+        observedAt: 20,
+        source: 'kubo',
+        direction: 'outbound',
+        transport: 'quic-v1',
+      },
+    ]);
+
+    expect(state.connectedCount).toBe(1);
+    expect(state.browserConnectedCount).toBe(0);
+    expect(state.kuboConnectedCount).toBe(1);
+  });
+
+  it('retains both provenance sources when the same peer is seen twice', () => {
+    const browser = reduce([
+      {
+        type: 'connected',
+        peerId: '12D3KooWDualSource',
+        observedAt: 10,
+        source: 'browser',
+        direction: 'outbound',
+        transport: 'websocket',
+      },
+    ]);
+    const state = reducePeerEvent(browser, {
+      type: 'connected',
+      peerId: '12D3KooWDualSource',
+      observedAt: 20,
+      source: 'kubo',
+      direction: 'outbound',
+      transport: 'tcp',
+    });
+
+    expect(state.peers.get('12D3KooWDualSource')?.source).toBe('both');
+    expect(state.browserConnectedCount).toBe(1);
+    expect(state.kuboConnectedCount).toBe(1);
   });
 
   it('ignores an out-of-order disconnect for current status', () => {

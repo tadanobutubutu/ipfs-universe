@@ -12,22 +12,27 @@ Peerstellation is a web-only 3D observatory for real Helia/libp2p observations. 
 
 ## 体験
 
-- ページ内で起動した Helia ブラウザノードの接続・発見・切断・ping・identify をリアルタイムに観測します。
+- ページ内で起動した Helia ブラウザノードの接続・発見・切断・ping・identify をリアルタイムに観測し、WebTransport、WebRTC、WebRTC Direct、WebSocket、リレーなど[Helia のブラウザ対応トランスポート](https://github.com/ipfs/helia/wiki/FAQ)と Amino Kad-DHT の bounded routing query で最大128件の追加候補も取得します。
 - ノードをカーソルで指す、キーボードで選ぶ、スマホでタップする、とその場所にアンカーされたカードへ Peer ID、状態、遅延、方向、transport、protocols、agent/protocol version、アドレス件数を表示します。
-- 接続線はこの観測ノードから実際に開いている接続です。`/p2p-circuit` のアドレスから中継ピアIDまで取得でき、同じ中継ピアが観測集合にも存在する場合だけ、実ノード同士の中継線を追加します。裏付けのない近接線は描かず、見栄えのためにトポロジーを捏造しません。
-- Zig WebAssembly は安定した全方位の配置と近遠の分布、Rust WebAssembly は接続数・遅延統計を担当し、軽い制御と表示は厳密な TypeScript で実装しています。
+- 接続線はこの観測ノードから実際に開いているブラウザ接続です。`/p2p-circuit` のアドレスから中継ピアIDまで取得でき、同じ中継ピアが観測集合にも存在する場合だけ、ブラウザまたはKuboの実ノード同士の中継線を追加します。裏付けのない近接線は描かず、見栄えのためにトポロジーを捏造しません。
+- Zig WebAssembly は安定した全方位の配置と近遠の分布、Rust WebAssembly は接続数・遅延統計を担当し、軽い制御と表示は厳密な TypeScript で実装しています。ローカル Kubo の明示インポートは最大1,024件を3Dへ載せ、アプリ内の追跡上限は2,048件です。Kubo観測は無彩色の外周、ブラウザliveはライム、ブラウザ発見候補は紫で分けます。
 
 ## Helia と IPFS Desktop の数字が違う理由
 
 IPFS Desktop の Kubo は TCP/QUIC の常駐ノードです。一方、ブラウザの Helia はブラウザが扱える WebSocket、WebRTC、リレー等だけで別の短命ノードを起動します。そのため Desktop に多数のピアがいても、ページの `connected` が 0〜数件になるのは正常です。ピア表は共有されません。
 
-ヘッダーの **Kubo** ボタンは明示的に押した時だけ `127.0.0.1:5001/api/v0/id` と `swarm/peers` を読みます。CORS が許可されていない場合は画面に止まり、Kubo の全 RPC を `*` に開放することはありません。ローカル接続を許可する場合も、開発元だけの厳密な Origin を設定してから IPFS Desktop を再起動してください。
+ヘッダーの **Kubo** ボタンを明示的に押した時だけ、`127.0.0.1:5001/api/v0/id` と詳細付き `swarm/peers` を読みます（仕様は [Kubo RPC リファレンス](https://docs.ipfs.tech/reference/kubo/rpc/)）。成功後は同じ利用者のオプトイン状態を保ったまま15秒周期で更新し、ページを離れるかエラーになると停止します。Kubo RPC は管理者権限相当なので、公開インターネットへ露出させてはいけません。現在の IPFS Desktop の既定設定は `https://webui.ipfs.io` だけを許可するため、Peerstellation のオリジンからは CORS で止まります。ローカル開発で試す場合だけ、実際に使う開発オリジンを列挙してから Desktop を再起動してください（`*` は使わない）。Kubo の数百件を読み込めても、それらはこのブラウザの live 接続ではないため、ヘッダーの live 数・ping 統計には混ぜません。
 
 ```bash
 # 例: 開発時だけ許可する Origin。* は使わない
-ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin \
-  '["http://127.0.0.1:4176"]'
+KUBO="/Applications/IPFS Desktop.app/Contents/Resources/app.asar.unpacked/node_modules/kubo/kubo/ipfs"
+"$KUBO" config --json API.HTTPHeaders.Access-Control-Allow-Origin \
+  '["http://127.0.0.1:4178"]'
+"$KUBO" swarm peers --verbose --latency --direction --identify --enc=json \
+  > /tmp/peerstellation-kubo-peers.json
 ```
+
+CLI の `swarm peers` は Kubo が長時間保持している接続を一覧化するため、ブラウザ Helia の一時的な接続より桁違いに多くなることがあります。JSON スナップショットは監査用に保存できますが、サイトがそれを自動的に読み込むことはありません。ローカル RPC の管理権限をブラウザへ渡したくない場合は、サイトの Helia 観測だけを使ってください。
 
 本番ページから利用者のローカルデーモンを自動探索することはありません。WebTransport/WebRTC の公告アドレスがあり、ユーザーが明示的に接続を選んだ場合だけ、別途対応します。
 
@@ -70,10 +75,10 @@ CLI で同梱 Kubo を確認する場合（アプリを停止・変更しませ�
 ## 設計と安全境界
 
 ```text
-Helia/libp2p ── typed observations ── PeerReducer (最大512)
+Helia/libp2p ── typed observations ── PeerReducer (最大2,048)
        │                                  ├── IndexedDB (公開IDの端末内履歴のみ)
-       │                                  └── ThreeUniverse (WebGPU → WebGL2 + picking tooltip)
-       ├── Kubo probe (ヘッダーからの明示操作時のみ Kubo RPC/CORS)
+       │                                  └── ThreeUniverse (WebGPU → WebGL2 + picking tooltip, 最大1,024描画)
+       ├── Kubo probe (明示操作後だけ Kubo RPC/CORSを15秒更新)
        └── Zig: 配置・物理・線分バッファ / Rust: 集計
 ```
 
@@ -95,7 +100,7 @@ Three.js自身はブラウザのWebGPU/WebGL APIを呼び出すJavaScriptライ�
 
 GPU手続き生成のシネマティック作品 [ABYSSAL / natural-disasters](https://github.com/Token-Gremlin/natural-disasters) の品質プリセット、動的な負荷計測、決定的な実機スクリーンショットという設計思想を参考にしました。Peerstellationのノード配置、到着演出、色、UI、WASM ABI、コード、シェーダー、文章、命名は独自に実装しており、参照リポジトリのソースは取り込んでいません。ABYSSALはMITライセンスで公開されていますが、Peerstellationの観測対象は実際に取得したHelia/libp2p情報だけに限定されます。
 
-品質は一方向の「軽量化」ではなく、120フレームのp95を基準に `cinema → balanced → efficient → still` を往復します。連続した負荷超過だけでピクセル比と星屑の描画数を下げ、十分な余裕が続けば一段ずつ戻します。新しいピアは discovery → ping → link → settle → reframe の段階を持ち、線分は `link` 以降だけを実測位置へ伸ばします。これらの状態はCanvasの診断属性にも残り、実機テストで視覚状態と計測値を同時に検証できます。
+品質は一方向の「軽量化」ではなく、120フレームのp95と最大フレーム時間を基準に `cinema → balanced → efficient → still` を往復します。p95が目標の1.25倍を超えるか、約25.1ms（16.7msの1.5倍）を超えるスパイクが連続するとピクセル比と星屑の描画数を下げ、十分な余裕が続けば一段ずつ戻します。新しいピアは discovery → ping → link → settle → reframe の段階を持ち、線分は `link` 以降だけを実測位置へ伸ばします。これらの状態はCanvasの診断属性にも残り、実機テストで視覚状態と計測値を同時に検証できます。
 
 ## 無料運用と収益化の境界
 

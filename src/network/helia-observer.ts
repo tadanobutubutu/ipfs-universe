@@ -12,10 +12,12 @@ import type {
   PeerInfo,
   ServiceMap,
 } from '@libp2p/interface';
+import { kadDHT } from '@libp2p/kad-dht';
 import { mplex } from '@libp2p/mplex';
 import { ping } from '@libp2p/ping';
 import { webRTC, webRTCDirect } from '@libp2p/webrtc';
 import { webSockets } from '@libp2p/websockets';
+import { webTransport } from '@libp2p/webtransport';
 import { createHeliaLight } from 'helia';
 
 import type { PeerConnectionDirection, PeerObservation } from './peer-types';
@@ -23,6 +25,8 @@ import type { PeerConnectionDirection, PeerObservation } from './peer-types';
 const DEFAULT_PING_CONCURRENCY = 2;
 const DEFAULT_PING_INTERVAL_MS = 30_000;
 const DEFAULT_PING_TIMEOUT_MS = 5_000;
+const DHT_DISCOVERY_TIMEOUT_MS = 15_000;
+const MAX_DHT_DISCOVERIES = 128;
 const MAX_OBSERVATIONS = 2_048;
 
 type AdapterEvent = 'connected' | 'disconnected' | 'discovered';
@@ -52,6 +56,10 @@ export interface HeliaNetworkAdapter {
   ): () => void;
   ping(remotePeer: ObservablePeer, signal: AbortSignal): Promise<number>;
   getPeerDetails?(remotePeer: ObservablePeer): Promise<PeerDetails | undefined>;
+  discover?(
+    listener: (remotePeer: ObservablePeer) => void,
+    signal: AbortSignal,
+  ): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -137,6 +145,7 @@ class BrowserHeliaObserver implements HeliaObserver {
   #observations: PeerObservation[] = [];
   #queuedPeers: ObservablePeer[] = [];
   #unsubscribers: Array<() => void> = [];
+  #discoveryController?: AbortController;
   #stopped = false;
 
   constructor(options: HeliaObserverOptions) {
@@ -215,6 +224,31 @@ class BrowserHeliaObserver implements HeliaObserver {
     }
 
     this.#observeConnections(adapter.getConnections());
+    if (adapter.discover !== undefined) {
+      const controller = new AbortController();
+      this.#discoveryController = controller;
+      const timeout = globalThis.setTimeout(
+        () => controller.abort(),
+        DHT_DISCOVERY_TIMEOUT_MS,
+      );
+      void adapter
+        .discover((remotePeer) => {
+          const peerId = remotePeer.toString();
+          if (peerId.trim() === '' || peerId === this.#localPeerId) return;
+          this.#emit({
+            type: 'discovered',
+            peerId,
+            observedAt: this.#now(),
+          });
+        }, controller.signal)
+        .catch(() => undefined)
+        .finally(() => {
+          globalThis.clearTimeout(timeout);
+          if (this.#discoveryController === controller) {
+            this.#discoveryController = undefined;
+          }
+        });
+    }
   }
 
   snapshot(): readonly PeerObservation[] {
@@ -385,6 +419,8 @@ class BrowserHeliaObserver implements HeliaObserver {
     this.#activePings.clear();
     this.#queuedPeerIds.clear();
     this.#queuedPeers = [];
+    this.#discoveryController?.abort();
+    this.#discoveryController = undefined;
 
     const adapter = this.#adapter;
     this.#adapter = undefined;
@@ -404,6 +440,7 @@ async function createDefaultHeliaAdapter(): Promise<HeliaNetworkAdapter> {
       webRTC(),
       webRTCDirect(),
       webSockets(),
+      webTransport(),
     ],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux(), mplex()],
@@ -420,6 +457,7 @@ async function createDefaultHeliaAdapter(): Promise<HeliaNetworkAdapter> {
       }),
     ],
     services: {
+      dht: kadDHT({ clientMode: true }),
       identify: identify(),
       identifyPush: identifyPush(),
       ping: ping(),
@@ -458,6 +496,23 @@ async function createDefaultHeliaAdapter(): Promise<HeliaNetworkAdapter> {
         protocolVersion: readMetadata('ProtocolVersion'),
         addressCount: Math.min(peer.addresses.length, 128),
       };
+    },
+    discover: async (listener, signal) => {
+      let count = 0;
+      try {
+        for await (const peer of libp2p.peerRouting.getClosestPeers(
+          libp2p.peerId.toMultihash().bytes,
+          { signal },
+        )) {
+          if (peer.id.toString() === libp2p.peerId.toString()) continue;
+          listener(peer.id);
+          count += 1;
+          if (count >= MAX_DHT_DISCOVERIES) break;
+        }
+      } catch {
+        // Browser routing is best-effort. Bootstrap/relay connections remain
+        // useful when the current network cannot answer a DHT query.
+      }
     },
     stop: async () => {
       await node.stop();

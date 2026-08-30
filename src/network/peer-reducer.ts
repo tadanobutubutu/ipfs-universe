@@ -1,19 +1,22 @@
 import type {
   PeerObservation,
   PeerRecord,
+  PeerSource,
   PeerState,
   PeerStatus,
   PersistedPeer,
 } from './peer-types';
 
 const EMPTY_PEERS: ReadonlyMap<string, PeerRecord> = new Map();
-export const MAX_TRACKED_PEERS = 512;
+export const MAX_TRACKED_PEERS = 2_048;
 
 export function emptyPeerState(): PeerState {
   return {
     peers: EMPTY_PEERS,
     totalCount: 0,
     connectedCount: 0,
+    browserConnectedCount: 0,
+    kuboConnectedCount: 0,
     discoveredCount: 0,
     disconnectedCount: 0,
     revision: 0,
@@ -42,6 +45,8 @@ export function reducePeerEvent(
     peers,
     totalCount: peers.size,
     connectedCount: counts.connected,
+    browserConnectedCount: counts.browserConnected,
+    kuboConnectedCount: counts.kuboConnected,
     discoveredCount: counts.discovered,
     disconnectedCount: counts.disconnected,
     revision: state.revision + 1,
@@ -92,7 +97,7 @@ function reduceRecord(
     case 'identified':
       return {
         ...seen,
-        source: observation.source ?? current?.source ?? 'browser',
+        source: mergeSource(current?.source, observation.source ?? 'browser'),
         ...(observation.protocols === undefined
           ? {}
           : { protocols: observation.protocols }),
@@ -123,7 +128,7 @@ function reduceRecord(
         ...(observation.relayPeerId === undefined
           ? {}
           : { relayPeerId: observation.relayPeerId }),
-        source: observation.source ?? current?.source ?? 'browser',
+        source: mergeSource(current?.source, observation.source ?? 'browser'),
         ...(observation.protocols === undefined
           ? {}
           : { protocols: observation.protocols }),
@@ -172,6 +177,15 @@ function reduceRecord(
         latencyObservedAt: observation.observedAt,
       };
   }
+}
+
+function mergeSource(
+  current: PeerSource | undefined,
+  next: PeerSource,
+): PeerSource {
+  if (current === undefined || current === next) return next;
+  if (current === 'both' || next === 'both') return 'both';
+  return 'both';
 }
 
 function validateObservation(observation: PeerObservation): void {
@@ -229,16 +243,26 @@ function prunePeers(peers: Map<string, PeerRecord>): void {
 
 function countStatuses(peers: ReadonlyMap<string, PeerRecord>): {
   connected: number;
+  browserConnected: number;
+  kuboConnected: number;
   discovered: number;
   disconnected: number;
 } {
   let connected = 0;
+  let browserConnected = 0;
+  let kuboConnected = 0;
   let discovered = 0;
   let disconnected = 0;
   for (const peer of peers.values()) {
     switch (peer.status) {
       case 'connected':
         connected += 1;
+        if (peer.source === 'kubo' || peer.source === 'both') {
+          kuboConnected += 1;
+        }
+        if (peer.source !== 'kubo') {
+          browserConnected += 1;
+        }
         break;
       case 'discovered':
         discovered += 1;
@@ -248,7 +272,13 @@ function countStatuses(peers: ReadonlyMap<string, PeerRecord>): {
         break;
     }
   }
-  return { connected, discovered, disconnected };
+  return {
+    connected,
+    browserConnected,
+    kuboConnected,
+    discovered,
+    disconnected,
+  };
 }
 
 function recordsEqual(left: PeerRecord, right: PeerRecord): boolean {

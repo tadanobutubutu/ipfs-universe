@@ -34,6 +34,14 @@ class FakeAdapter implements HeliaNetworkAdapter {
 
   connections: ObservableConnection[] = [];
   ping = vi.fn(async () => 12);
+  discover = vi.fn(
+    async (
+      listener: (remotePeer: ObservablePeer) => void,
+      _signal: AbortSignal,
+    ) => {
+      listener(peer('12D3KooWDhtDiscovered'));
+    },
+  );
   stop = vi.fn(async () => undefined);
 
   getConnections(remotePeer?: ObservablePeer): readonly ObservableConnection[] {
@@ -160,6 +168,27 @@ describe('Helia observer', () => {
     await observer.stop();
   });
 
+  it('runs the bounded routing discovery pass at startup', async () => {
+    const adapter = new FakeAdapter();
+    const observer = await startHeliaObserver({
+      createAdapter: async () => adapter,
+      now: () => 150,
+    });
+
+    await vi.waitFor(() =>
+      expect(observer.snapshot()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'discovered',
+            peerId: '12D3KooWDhtDiscovered',
+          }),
+        ]),
+      ),
+    );
+    expect(adapter.discover).toHaveBeenCalledOnce();
+    await observer.stop();
+  });
+
   it('emits disconnect only after the last real connection closes', async () => {
     const adapter = new FakeAdapter();
     const remotePeer = peer('12D3KooWRemote');
@@ -252,5 +281,21 @@ describe('Helia observer', () => {
 
     expect(observer.snapshot()).toEqual(before);
     expect(adapter.stop).toHaveBeenCalledOnce();
+  });
+
+  it('cancels the routing discovery query when the observer stops', async () => {
+    const adapter = new FakeAdapter();
+    const signals: AbortSignal[] = [];
+    adapter.discover.mockImplementationOnce(async (_listener, signal) => {
+      signals.push(signal);
+      await new Promise<void>(() => undefined);
+    });
+    const observer = await startHeliaObserver({
+      createAdapter: async () => adapter,
+      now: () => 600,
+    });
+
+    await observer.stop();
+    expect(signals[0]?.aborted).toBe(true);
   });
 });

@@ -9,6 +9,8 @@ export type QualityTier = (typeof QUALITY_TIERS)[number];
 
 export interface QualitySample {
   readonly frameP95Ms: number;
+  /** Largest observed frame in the sample window, used for jank spikes. */
+  readonly frameMaxMs?: number;
 }
 
 export interface QualityDecision {
@@ -27,6 +29,7 @@ const PIXEL_RATIO_SCALES: Record<QualityTier, number> = {
 
 const DEFAULT_TARGET_MS = 16.7;
 const DOWNGRADE_THRESHOLD = 1.25;
+const SPIKE_THRESHOLD = 1.5;
 const RECOVERY_THRESHOLD = 0.7;
 const DOWNGRADE_STREAK = 2;
 const RECOVERY_STREAK = 3;
@@ -52,7 +55,12 @@ export class QualityPolicy {
       return this.#decision(false, 'steady');
     }
 
-    if (p95 > this.#targetMs * DOWNGRADE_THRESHOLD) {
+    const frameMax = sample.frameMaxMs;
+    const spike =
+      frameMax !== undefined &&
+      Number.isFinite(frameMax) &&
+      frameMax > this.#targetMs * SPIKE_THRESHOLD;
+    if (p95 > this.#targetMs * DOWNGRADE_THRESHOLD || spike) {
       this.#overBudgetStreak += 1;
       this.#recoveryStreak = 0;
       if (

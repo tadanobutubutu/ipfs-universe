@@ -2,7 +2,7 @@
 
 use core::panic::PanicInfo;
 
-const MAX_NODES: usize = 512;
+const MAX_NODES: usize = 1024;
 const INPUT_STRIDE: usize = 2;
 const RESULT_LEN: usize = 9;
 const STATUS_CONNECTED: f32 = 1.0;

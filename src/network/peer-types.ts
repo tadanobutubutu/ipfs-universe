@@ -1,7 +1,7 @@
 export type PeerConnectionDirection = 'inbound' | 'outbound' | 'unknown';
 
 export type PeerStatus = 'connected' | 'disconnected' | 'discovered';
-export type PeerSource = 'browser' | 'kubo';
+export type PeerSource = 'browser' | 'kubo' | 'both';
 
 export type PeerObservation =
   | {
@@ -66,7 +66,12 @@ export interface PeerRecord {
 export interface PeerState {
   readonly peers: ReadonlyMap<string, PeerRecord>;
   readonly totalCount: number;
+  /** All connected records, including an explicitly imported Kubo view. */
   readonly connectedCount: number;
+  /** Connections opened by this browser's Helia/libp2p node. */
+  readonly browserConnectedCount: number;
+  /** Open connections reported by the user's local Kubo daemon. */
+  readonly kuboConnectedCount: number;
   readonly discoveredCount: number;
   readonly disconnectedCount: number;
   readonly revision: number;

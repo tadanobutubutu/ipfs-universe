@@ -1,6 +1,9 @@
 const MIN_CAMERA_DISTANCE = 28;
 const MAX_CAMERA_DISTANCE = 360;
-const PORTRAIT_FOCAL_MAX_DISTANCE = 132;
+// Keep the observatory core visually present on narrow screens. The distance
+// is still derived from the full peer field; this is only a guard against a
+// single outer observation making every node a pinprick.
+const PORTRAIT_FOCAL_MAX_DISTANCE = 145;
 
 /**
  * Return the camera distance required to keep a spherical peer field inside

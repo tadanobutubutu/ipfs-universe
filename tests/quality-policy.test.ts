@@ -41,4 +41,15 @@ describe('symmetric render quality policy', () => {
     expect(decision.pixelRatioScale).toBe(1);
     expect(decision.reason).toBe('recovered');
   });
+
+  it('downgrades on repeated long frame spikes even when p95 is healthy', () => {
+    const policy = new QualityPolicy();
+
+    policy.observe({ frameP95Ms: 10, frameMaxMs: 26 });
+    const decision = policy.observe({ frameP95Ms: 10, frameMaxMs: 26 });
+
+    expect(decision.changed).toBe(true);
+    expect(decision.tier).toBe('balanced');
+    expect(decision.reason).toBe('over-budget');
+  });
 });

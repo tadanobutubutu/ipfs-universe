@@ -184,8 +184,7 @@ export class AppShell {
           ? 'not observed'
           : shortPeerId(peer.relayPeerId);
       this.#nodeTooltipRelay.title = peer.relayPeerId ?? '';
-      this.#nodeTooltipSource.textContent =
-        peer.source === 'kubo' ? 'local Kubo' : 'browser Helia';
+      this.#nodeTooltipSource.textContent = sourceLabel(peer.source);
     }
     this.#nodeTooltip.dataset.pinned = pinned ? 'true' : 'false';
     this.#nodeTooltip.style.left = `${x}px`;
@@ -293,16 +292,18 @@ export class AppShell {
   updatePeerState(state: PeerState, analytics?: PeerAnalytics): void {
     const peers = [...state.peers.values()];
     this.#currentPeers = peers;
-    this.#connectedMetric.textContent = formatInteger(state.connectedCount);
+    this.#connectedMetric.textContent = formatInteger(
+      state.browserConnectedCount,
+    );
     this.#connectedMetric.parentElement?.setAttribute(
       'data-tone',
-      state.connectedCount === 0 ? 'empty' : 'ok',
+      state.browserConnectedCount === 0 ? 'empty' : 'ok',
     );
     this.#observedMetric.textContent = formatInteger(state.totalCount);
-    this.#peerCount.textContent = formatInteger(state.connectedCount);
+    this.#peerCount.textContent = formatInteger(state.browserConnectedCount);
     this.#peerButton.setAttribute(
       'aria-label',
-      `Open peer explorer, ${formatInteger(state.connectedCount)} connected peers`,
+      `Open peer explorer, ${formatInteger(state.browserConnectedCount)} browser live peers`,
     );
     this.#latencyMetric.textContent =
       analytics === undefined || analytics.latencySamples === 0
@@ -314,15 +315,15 @@ export class AppShell {
         : `${formatInteger(analytics.latencyP95Ms)} ms`;
     const measured = analytics?.latencySamples ?? 0;
     const coverage = analytics?.measurementCoverage ?? 0;
-    this.#latencySamples.textContent = `${formatInteger(measured)} / ${formatInteger(state.connectedCount)} live pings${state.connectedCount === 0 ? '' : ` · ${Math.round(coverage)}% coverage`}`;
-    this.#peerSummary.textContent = `${formatInteger(state.connectedCount)} connected, ${formatInteger(state.discoveredCount)} discovered, ${formatInteger(state.disconnectedCount)} disconnected in the bounded active view.`;
+    this.#latencySamples.textContent = `${formatInteger(measured)} / ${formatInteger(state.browserConnectedCount)} live pings${state.browserConnectedCount === 0 ? '' : ` · ${Math.round(coverage)}% coverage`}`;
+    this.#peerSummary.textContent = `${formatInteger(state.browserConnectedCount)} browser live · ${formatInteger(state.kuboConnectedCount)} local Kubo observed · ${formatInteger(state.discoveredCount)} discovered · ${formatInteger(state.disconnectedCount)} disconnected in the bounded active view.`;
     this.#renderFilteredPeers();
     const connectedBucket =
-      state.connectedCount < 5
-        ? state.connectedCount
-        : Math.round(state.connectedCount / 5) * 5;
+      state.browserConnectedCount < 5
+        ? state.browserConnectedCount
+        : Math.round(state.browserConnectedCount / 5) * 5;
     this.#queueAnnouncement(
-      `${connectedBucket >= 5 ? 'About ' : ''}${connectedBucket} peers connected. ${state.totalCount} peers tracked in the active view.`,
+      `${connectedBucket >= 5 ? 'About ' : ''}${connectedBucket} browser peers connected. ${state.totalCount} peers tracked in the active view.`,
     );
   }
 
@@ -341,7 +342,7 @@ export class AppShell {
     this.#peerResultCount.textContent = `${formatInteger(filtered.length)} shown`;
     this.#peerEmpty.textContent =
       this.#currentPeers.length === 0
-        ? 'No browser-reachable peers have been observed yet. Discovery can take a moment and depends on the transports available to this browser.'
+        ? 'No peers have been observed yet. Browser discovery can take a moment; local Kubo peers appear after an explicit RPC probe with CORS enabled.'
         : 'No observed peer matches the current search and state filter.';
   }
 
@@ -375,6 +376,12 @@ export class AppShell {
 
 function statusLabel(status: PeerStatus): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function sourceLabel(source: PeerRecord['source']): string {
+  if (source === 'kubo') return 'local Kubo';
+  if (source === 'both') return 'browser Helia + local Kubo';
+  return 'browser Helia';
 }
 
 function parsePeerFilter(value: string): PeerStatus | undefined {

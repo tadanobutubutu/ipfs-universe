@@ -8,6 +8,7 @@ import {
 } from './db/peer-history';
 import type { HeliaObserver } from './network/helia-observer';
 import { KuboProbeError, probeLocalKubo } from './network/kubo-observer';
+import { KuboRefreshScheduler } from './network/kubo-refresh';
 import {
   emptyPeerState,
   reducePeerEvent,
@@ -37,6 +38,12 @@ const PERSIST_BATCH_INTERVAL_MS = 5_000;
 // 3D frame on throttled mobile CPUs.
 const NETWORK_BOOT_DELAY_MS = 12_000;
 const MOBILE_NETWORK_BOOT_DELAY_MS = 12_000;
+
+if (import.meta.env.DEV) {
+  (
+    window as Window & { __peerstellationSceneReady?: boolean }
+  ).__peerstellationSceneReady = false;
+}
 
 const canvas = requiredCanvas('universe-canvas');
 const shell = new AppShell();
@@ -69,8 +76,12 @@ shell.onClearHistory(() => {
     .then(() => shell.setStoredPeerCount(0))
     .catch(() => shell.setStoredPeerUnavailable());
 });
+const kuboRefresh = new KuboRefreshScheduler(readLocalKubo);
 shell.onKuboProbe(() => {
-  void readLocalKubo();
+  kuboRefresh.stop();
+  void readLocalKubo().then((succeeded) => {
+    if (succeeded && !appDisposed) kuboRefresh.start();
+  });
 });
 shell.updatePeerState(peerState);
 
@@ -92,6 +103,11 @@ requestAnimationFrame(() => {
   void startScene().then(() => {
     if (universe !== undefined) {
       shell.markSceneReady();
+      if (import.meta.env.DEV) {
+        (
+          window as Window & { __peerstellationSceneReady?: boolean }
+        ).__peerstellationSceneReady = true;
+      }
     }
     void startDeferredSystems();
   });
@@ -101,6 +117,7 @@ window.addEventListener(
   'pagehide',
   () => {
     appDisposed = true;
+    kuboRefresh.stop();
     networkGeneration += 1;
     unsubscribeObserver?.();
     unsubscribeObserver = undefined;
@@ -129,13 +146,19 @@ async function startScene(): Promise<void> {
     // relay fixture into the real renderer. It is tree-shaken from production
     // and never exposes network state in the deployed app.
     if (import.meta.env.DEV) {
-      (
-        window as Window & {
-          __peerstellationSetPeers?: (peers: readonly PeerRecord[]) => void;
-        }
-      ).__peerstellationSetPeers = (peers) => universe?.setPeers(peers);
+      const devWindow = window as Window & {
+        __peerstellationFreezePeers?: boolean;
+        __peerstellationSetPeers?: (peers: readonly PeerRecord[]) => void;
+      };
+      devWindow.__peerstellationFreezePeers = false;
+      devWindow.__peerstellationSetPeers = (peers) => universe?.setPeers(peers);
     }
   } catch {
+    if (import.meta.env.DEV) {
+      (
+        window as Window & { __peerstellationSceneReady?: boolean }
+      ).__peerstellationSceneReady = false;
+    }
     shell.markSceneUnavailable();
   }
 }
@@ -161,7 +184,7 @@ async function startDeferredSystems(): Promise<void> {
   await Promise.allSettled([physicsTask, analyticsTask, networkTask]);
 }
 
-async function readLocalKubo(): Promise<void> {
+async function readLocalKubo(): Promise<boolean> {
   shell.setKuboStatus(
     'Requesting /id and /swarm/peers from 127.0.0.1:5001…',
     true,
@@ -171,9 +194,10 @@ async function readLocalKubo(): Promise<void> {
     for (const observation of result.observations)
       acceptObservation(observation);
     shell.setKuboStatus(
-      `${result.peerCount} peers read from local Kubo. Browser Helia remains a separate node.`,
+      `${result.peerCount} peers observed by local Kubo${result.truncated ? `; first ${result.observations.filter(({ type }) => type === 'connected').length.toLocaleString()} admitted to the view` : ''}. Browser Helia remains a separate node. Refreshing every 15s while enabled.`,
     );
     scheduleUiUpdate();
+    return true;
   } catch (error) {
     const message =
       error instanceof KuboProbeError && error.code === 'cors'
@@ -182,6 +206,7 @@ async function readLocalKubo(): Promise<void> {
           ? error.message
           : 'Local Kubo could not be read.';
     shell.setKuboStatus(message);
+    return false;
   }
 }
 
@@ -257,9 +282,9 @@ function acceptObservation(observation: PeerObservation): void {
 
 function updateNetworkStatus(localPeerId: string | undefined): void {
   const message =
-    peerState.connectedCount === 0
+    peerState.browserConnectedCount === 0
       ? 'Searching for browser-reachable peers'
-      : `Observing ${peerState.connectedCount} live ${peerState.connectedCount === 1 ? 'connection' : 'connections'}`;
+      : `Observing ${peerState.browserConnectedCount} live ${peerState.browserConnectedCount === 1 ? 'connection' : 'connections'}`;
   shell.setNetworkState('online', message, localPeerId);
 }
 
@@ -270,8 +295,16 @@ function scheduleUiUpdate(): void {
   updateTimer = window.setTimeout(() => {
     updateTimer = undefined;
     const peers = [...peerState.peers.values()];
-    universe?.setPeers(peers);
-    const metrics = analytics?.analyze(peers);
+    const devWindow = window as Window & {
+      __peerstellationFreezePeers?: boolean;
+    };
+    if (devWindow.__peerstellationFreezePeers !== true) {
+      universe?.setPeers(peers);
+    }
+    // Kubo imports carry daemon latency, not browser ping samples. Keep them
+    // in the scene and explorer while excluding them from Helia live metrics.
+    const browserPeers = peers.filter((peer) => peer.source !== 'kubo');
+    const metrics = analytics?.analyze(browserPeers);
     shell.updatePeerState(peerState, metrics);
     persistChangedPeers(peerState);
   }, UI_BATCH_INTERVAL_MS);

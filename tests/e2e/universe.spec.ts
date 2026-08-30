@@ -16,7 +16,16 @@ test('shows the 3D observatory immediately with semantic structure', async ({
   page,
 }) => {
   const pageErrors: string[] = [];
+  const zeroVertexWarnings: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (message) => {
+    if (
+      message.type() === 'warning' &&
+      /vertex count of 0/iu.test(message.text())
+    ) {
+      zeroVertexWarnings.push(message.text());
+    }
+  });
 
   await page.goto('/');
 
@@ -53,6 +62,7 @@ test('shows the 3D observatory immediately with semantic structure', async ({
   expect(canvasSize.width).toBeGreaterThan(300);
   expect(canvasSize.height).toBeGreaterThan(300);
   expect(pageErrors).toEqual([]);
+  expect(zeroVertexWarnings).toEqual([]);
 });
 
 test('falls back to WebGL2 when WebGPU is unavailable', async ({ page }) => {
@@ -246,8 +256,66 @@ test('keeps network state and peer count names discoverable at a standard phone 
     'status',
   );
   await expect(page.locator('#peer-explorer-button')).toHaveAccessibleName(
-    /open peer explorer, 0 connected peers/i,
+    /open peer explorer, 0 browser live peers/i,
   );
+});
+
+test('imports local Kubo peers without relabelling them as browser-live', async ({
+  page,
+}) => {
+  await page.route('http://127.0.0.1:5001/api/v0/**', async (route) => {
+    const requestUrl = route.request().url();
+    if (requestUrl.includes('/id')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ID: '12D3KooWLocalKubo' }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        Peers: [
+          {
+            Peer: '12D3KooWKuboOne',
+            Addr: '/ip4/198.51.100.1/tcp/4001',
+            Latency: '24ms',
+            Direction: 2,
+            Identify: {
+              AgentVersion: 'kubo/test',
+              ProtocolVersion: 'ipfs/0.1.0',
+              Protocols: ['/ipfs/kad/1.0.0'],
+              Addresses: ['/ip4/198.51.100.1/tcp/4001'],
+            },
+          },
+          {
+            Peer: '12D3KooWKuboTwo',
+            Addr: '/ip4/198.51.100.2/udp/4001/quic-v1',
+            Direction: 1,
+          },
+          {
+            Peer: '12D3KooWKuboThree',
+            Addr: '/ip4/198.51.100.3/tcp/4001',
+            Direction: 2,
+          },
+        ],
+      }),
+    });
+  });
+  await page.goto('/');
+
+  await page.locator('#kubo-probe').click();
+  await expect(page.locator('#metric-observed')).toHaveText('3', {
+    timeout: 5_000,
+  });
+  await expect(page.locator('#metric-connected')).toHaveText('0');
+  await expect(page.locator('#header-peer-count')).toHaveText('0');
+  await expect(page.locator('#kubo-status')).toContainText('3 peers observed');
+
+  await page.getByRole('button', { name: /peer explorer|peers/i }).click();
+  await expect(page.locator('.peer-row[data-source="kubo"]')).toHaveCount(3);
 });
 
 test('keeps every observatory layer separated across the responsive matrix', async ({
@@ -501,6 +569,126 @@ test('keeps the live scene inside the fixed draw-call budget', async ({
   expect(laterObjects).toBe(initialObjects);
 });
 
+test('renders a 1,024-peer Kubo import with bounded draw calls', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
+  const result = await page.evaluate(() => {
+    type FixturePeer = {
+      peerId: string;
+      status: 'connected';
+      source: 'kubo' | 'browser';
+      statusObservedAt: number;
+      firstSeenAt: number;
+      lastSeenAt: number;
+      direction: 'inbound' | 'outbound';
+      transport: string;
+    };
+    const setPeers = (
+      window as Window & {
+        __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
+      }
+    ).__peerstellationSetPeers;
+    if (setPeers === undefined)
+      throw new Error('development density fixture is unavailable');
+    const peers: FixturePeer[] = Array.from({ length: 1_024 }, (_, index) => ({
+      peerId: `12D3KooWKuboDensity${String(index).padStart(4, '0')}`,
+      status: 'connected' as const,
+      source: 'kubo' as const,
+      statusObservedAt: 1,
+      firstSeenAt: 1,
+      lastSeenAt: 1,
+      direction: 'outbound' as const,
+      transport: 'quic-v1',
+    }));
+    peers[0] = {
+      ...peers[0],
+      peerId: '12D3KooWBrowserPriority',
+      source: 'browser',
+    };
+    setPeers(peers);
+    const canvas =
+      document.querySelector<HTMLCanvasElement>('#universe-canvas');
+    return {
+      radii: (canvas?.dataset.peerRadii ?? '').split(',').filter(Boolean)
+        .length,
+      renderer: canvas?.dataset.renderer,
+    };
+  });
+  expect(result.radii).toBe(1_024);
+  expect(result.renderer).toMatch(/^(WebGPU|WebGL 2)$/u);
+  await expect(page.locator('#universe-canvas')).toHaveAttribute(
+    'data-draw-calls',
+    /\d+/u,
+    { timeout: 8_000 },
+  );
+  expect(
+    Number(
+      await page.locator('#universe-canvas').getAttribute('data-draw-calls'),
+    ),
+  ).toBeLessThanOrEqual(12);
+});
+
+test('keeps a browser-live edge visible on a narrow viewport beside Kubo peers', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
+  const result = await page.evaluate(() => {
+    type FixturePeer = {
+      peerId: string;
+      status: 'connected';
+      source: 'kubo' | 'browser';
+      statusObservedAt: number;
+      firstSeenAt: number;
+      lastSeenAt: number;
+      direction: 'inbound' | 'outbound';
+      transport: string;
+      latencyMs?: number;
+    };
+    const setPeers = (
+      window as Window & {
+        __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
+      }
+    ).__peerstellationSetPeers;
+    if (setPeers === undefined)
+      throw new Error('development mobile density fixture is unavailable');
+    const peers: FixturePeer[] = Array.from({ length: 64 }, (_, index) => ({
+      peerId: `12D3KooWKuboMobile${String(index).padStart(3, '0')}`,
+      status: 'connected',
+      source: 'kubo',
+      statusObservedAt: 1,
+      firstSeenAt: 1,
+      lastSeenAt: 1,
+      direction: 'outbound',
+      transport: 'quic-v1',
+    }));
+    peers[0] = {
+      ...peers[0],
+      peerId: '12D3KooWBrowserMobile',
+      source: 'browser',
+      transport: 'websocket',
+      latencyMs: 24,
+    };
+    setPeers(peers);
+    const canvas =
+      document.querySelector<HTMLCanvasElement>('#universe-canvas');
+    return {
+      edges: canvas?.dataset.edgeSegments,
+      radii: (canvas?.dataset.peerRadii ?? '').split(',').filter(Boolean)
+        .length,
+    };
+  });
+  expect(result.radii).toBe(64);
+  await expect(page.locator('#universe-canvas')).toHaveAttribute(
+    'data-edge-segments',
+    /[1-9]\d*/u,
+    { timeout: 5_000 },
+  );
+});
+
 test('draws relay edges only when both relay endpoints are observed', async ({
   page,
 }) => {
@@ -554,6 +742,65 @@ test('draws relay edges only when both relay endpoints are observed', async ({
     return { withRelay, withoutRelay };
   });
   expect(result).toEqual({ withRelay: '3', withoutRelay: '1' });
+});
+
+test('draws a Kubo relay edge without inventing a browser center edge', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
+  const result = await page.evaluate(() => {
+    type FixturePeer = {
+      peerId: string;
+      status: 'connected';
+      source: 'kubo';
+      statusObservedAt: number;
+      firstSeenAt: number;
+      lastSeenAt: number;
+      direction: 'inbound' | 'outbound';
+      transport: string;
+      relayPeerId?: string;
+    };
+    const setPeers = (
+      window as Window & {
+        __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
+      }
+    ).__peerstellationSetPeers;
+    if (setPeers === undefined)
+      throw new Error('development Kubo relay fixture is unavailable');
+    const relay: FixturePeer = {
+      peerId: '12D3KooWKuboRelayEvidence',
+      source: 'kubo',
+      status: 'connected',
+      statusObservedAt: 1,
+      firstSeenAt: 1,
+      lastSeenAt: 1,
+      direction: 'outbound',
+      transport: 'quic-v1',
+    };
+    setPeers([
+      relay,
+      {
+        peerId: '12D3KooWKuboTargetEvidence',
+        source: 'kubo',
+        status: 'connected',
+        statusObservedAt: 1,
+        firstSeenAt: 1,
+        lastSeenAt: 1,
+        direction: 'inbound',
+        transport: 'circuit-relay',
+        relayPeerId: relay.peerId,
+      },
+    ]);
+    const canvas =
+      document.querySelector<HTMLCanvasElement>('#universe-canvas');
+    return {
+      edges: canvas?.dataset.edgeSegments,
+      browser: canvas?.dataset.browserNodeCount,
+      kubo: canvas?.dataset.kuboNodeCount,
+    };
+  });
+  expect(result).toEqual({ edges: '1', browser: '0', kubo: '2' });
 });
 
 test('keeps the measured latency-to-radius signal visible in the live renderer', async ({

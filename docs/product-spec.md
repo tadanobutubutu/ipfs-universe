@@ -26,7 +26,7 @@
 - デスクトップのLCP: 1.8秒以下を目標、2.5秒を失敗閾値とする。
 - モバイルのLCP: 2.5秒以下を目標、4.0秒を失敗閾値とする。
 - 初期JavaScript: 350 KiB gzip以下。Heliaは初期チャンクへ含めない。
-- 3D描画: 通常12 draw call以下、DPR上限1.5、ノード上限512。
+- 3D描画: 通常12 draw call以下、DPR上限1.5、追跡上限2,048、描画上限1,024。
 - 60 Hz端末: デスクトップp75で55 FPS以上。省電力または小画面では30 FPS以上。
 - 長いタスク: 起動後5秒間に50 ms超を3件以下。
 - メモリ: 接続・切断を30分繰り返して、切断済みノードのThree.jsリソースが増え続けない。
@@ -74,21 +74,21 @@
 
 ## 6. ネットワーク構成
 
-- ブラウザ用の軽量libp2p構成を使い、WebRTC/WebRTC Direct/WebSocket/リレー、Noise、Yamux/Mplex、identify、ping、bootstrapだけを有効にする。
+- ブラウザ用の軽量libp2p構成を使い、WebTransport/WebRTC/WebRTC Direct/WebSocket/リレー、Noise、Yamux/Mplex、identify、ping、bootstrap、client-mode Amino Kad-DHT bounded queryを有効にする。WebTransport非対応ブラウザではmultiaddrの適合判定により他の対応transportへフォールバックする。
 - bootstrapリストは依存する`@helia/libp2p`の公開リストを同じバージョンで固定し、アプリの表示データや疑似ピアとは混ぜない。依存更新時にリストも再確認する。
 - WebRTCを利用できるよう、Helia/libp2pはWindow側で遅延初期化する。
 - イベントを型付きの`PeerObservation`へ正規化し、描画へは最大10 Hzでバッチ反映する。
 - `getConnections()`で初期スナップショットを取り、イベント登録前後の取りこぼしを補う。
 - pingは接続済みピアに限定し、同時実行2件、5秒タイムアウト、各ピア30秒以上の間隔を設ける。
-- Kuboの接続表はブラウザHeliaと別ソースである。Peer explorerの明示操作時だけ、CORSを許可した`127.0.0.1:5001`へ`/id`と`/swarm/peers?verbose=true`をPOSTし、`source: "kubo"`として表示する。自動アクセス、`*`許可、認証情報の転送はしない。
-- ブラウザが観測できるのはローカルノードの直接接続だけであり、リモートピア同士の接続は共有された証拠がない限り線を引かない。
+- Kuboの接続表はブラウザHeliaと別ソースである。Peer explorerの明示操作時だけ、CORSを許可した`127.0.0.1:5001`へ`/id`と詳細付き`/swarm/peers`をPOSTし、`source: "kubo"`として表示する。成功後は15秒周期で同じ明示オプトインを更新し、ページ離脱またはエラーで停止する。`/p2p-circuit`のリレーIDが両端の観測集合に存在する場合だけ、Kubo同士のリレー線を描く。ロード時の自動アクセス、`*`許可、認証情報の転送はしない。
+- ブラウザが観測できるのはローカルノードの直接接続だけであり、リモートピア同士の接続は共有された証拠がない限り線を引かない。Kuboの外周ノードは別プロセスの観測であり、ブラウザの中心線には含めない。
 - IndexedDBには公開peer ID、状態、最終観測時刻、実測レイテンシだけを保存する。秘密鍵と完全なmultiaddrは保存しない。
 
 ## 7. WASMの責務
 
 ### Zig
 
-- 512ノードまでの位置、速度、中心引力、反発、減衰を更新する。
+- 1,024ノードまでの位置、速度、中心引力、反発、減衰を更新する。Kubo観測の外周（最大76ワールド単位）を保持し、ブラウザliveの中心領域と潰さない。
 - 中心線と、両端の観測記録があるリレー線の位置・輝度を計算する。
 - 固定メモリを使い、Three.jsのBufferAttributeはWASMメモリを直接参照する。
 - TypeScriptへ毎フレーム配列コピーしない。

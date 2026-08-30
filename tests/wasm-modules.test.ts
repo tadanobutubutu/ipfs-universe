@@ -137,7 +137,7 @@ describe('native WebAssembly modules', () => {
     const initialize = exportedFunction(physics.instance, 'init_system');
     const step = exportedFunction(physics.instance, 'step');
 
-    expect(maximum).toBe(512);
+    expect(maximum).toBe(1_024);
     expect(() => {
       initialize(50_000);
       step(10, 50_000, 1);
@@ -182,6 +182,29 @@ describe('native WebAssembly modules', () => {
     );
     expect([...positions].every(Number.isFinite)).toBe(true);
     expect([...colors].every(Number.isFinite)).toBe(true);
+  });
+
+  it('keeps Kubo relay evidence without drawing a browser center edge', () => {
+    const initialize = exportedFunction(physics.instance, 'init_system');
+    const seedNode = exportedFunction(physics.instance, 'seed_node');
+    const setPeerMetadata = exportedFunction(
+      physics.instance,
+      'set_peer_metadata',
+    );
+    const setPeerSource = exportedFunction(physics.instance, 'set_peer_source');
+    const layoutEdges = exportedFunction(physics.instance, 'layout_edges');
+    const edgeCount = exportedFunction(physics.instance, 'edge_count');
+
+    initialize(2);
+    seedNode(0, 11, 60, 0);
+    seedNode(1, 22, 68, 3);
+    setPeerMetadata(0, 1, -1, -1);
+    setPeerMetadata(1, 1, -1, 0);
+    setPeerSource(0, 1);
+    setPeerSource(1, 1);
+    layoutEdges(2);
+
+    expect(edgeCount()).toBe(1);
   });
 
   it('uses only live peer pings for Rust latency and coverage analytics', () => {

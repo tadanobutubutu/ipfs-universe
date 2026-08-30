@@ -26,7 +26,7 @@ describe('perspective observatory framing', () => {
     expect(portrait).toBeGreaterThan(landscape);
     expect(portrait).toBeCloseTo(92.61, 1);
     expect(capPortraitDistance(portrait, 0.45)).toBeCloseTo(92.61, 1);
-    expect(capPortraitDistance(240, 0.45)).toBe(132);
+    expect(capPortraitDistance(240, 0.45)).toBe(145);
   });
 
   it('returns a safe finite distance for empty or invalid bounds', () => {

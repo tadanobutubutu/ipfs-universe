@@ -145,8 +145,9 @@
         </section>
 
         <ul class="scene-legend" aria-label="3D scene legend">
-          <li><i class="legend-dot legend-dot--connected" aria-hidden="true"></i>Connected · line to center</li>
+          <li><i class="legend-dot legend-dot--connected" aria-hidden="true"></i>Browser live · line to center</li>
           <li><i class="legend-dot legend-dot--discovered" aria-hidden="true"></i>Discovered only</li>
+          <li><i class="legend-dot legend-dot--kubo" aria-hidden="true"></i>Local Kubo observed · outer field</li>
           <li><i class="legend-dot legend-dot--dust" aria-hidden="true"></i>Decorative signal dust</li>
           <li class="scene-legend__axis">Distance = measured latency · outer orbit = unmeasured</li>
           <li class="scene-legend__axis scene-legend__detail">Angle sectors = WebSocket · WebRTC · WebTransport · Relay · Other</li>
@@ -187,12 +188,12 @@
 
         <div class="metric-deck" role="group" aria-label="Live observation metrics">
           <dl class="metric">
-            <dt>Connected now <span>Live</span></dt>
-            <dd data-tone="empty"><strong id="metric-connected">0</strong><small>Current libp2p connections</small></dd>
+            <dt>Connected now <span>Browser live</span></dt>
+            <dd data-tone="empty"><strong id="metric-connected">0</strong><small>Current browser Helia connections</small></dd>
           </dl>
           <dl class="metric">
-            <dt>Tracked view <span>Capped</span></dt>
-            <dd><strong id="metric-observed">0</strong><small>Recent peers · maximum 512</small></dd>
+            <dt>Tracked view <span>All sources</span></dt>
+            <dd><strong id="metric-observed">0</strong><small>Recent peers · maximum 2,048</small></dd>
           </dl>
           <dl class="metric">
             <dt>Median latency <span>Measured</span></dt>
@@ -206,17 +207,20 @@
 
         <p class="scope-note">
           <strong>Observation scope</strong>
-          This browser’s reachable neighborhood, capped at 512 recent peers; not the entire IPFS network.
+          This browser’s reachable neighborhood plus explicitly imported local Kubo observations; tracked at 2,048 and rendered at 1,024, never the entire IPFS network.
         </p>
 
         <p class="sr-only" id="scene-description">
           The center represents this browser’s Helia node. Bright green nodes are currently
-          connected peers and have a line to the center. Violet nodes were discovered but are
-          not presented as connected. Distance from the center maps measured latency; unmeasured
-          peers occupy the outer orbit, and angle groups the observed transport. Decorative
-          background stars do not represent peers. A relay edge appears only when the relay ID is
-          present in the observed peer set; arbitrary peer-to-peer topology is never inferred. Use
-          the peer explorer for the same information in text form.
+          connected to the browser and have a line to the center. Violet nodes were discovered by
+          browser routing but are not connected. Neutral slate nodes are open connections reported
+          by the separate local Kubo daemon; they are not browser connections and have no line to
+          this center. Distance from the center maps measured latency; unmeasured peers occupy the
+          outer orbit, and angle groups the observed transport. Decorative background stars do not
+          represent peers. The faint outer orbit marks the imported Kubo field and is not a
+          connection. A relay edge appears only when the relay ID is present in the observed
+          peer set; arbitrary peer-to-peer topology is never inferred. Use the peer explorer for the
+          same information in text form.
         </p>
       </section>
     </main>
@@ -238,7 +242,8 @@
           Waiting for the browser node to report peers.
         </p>
         <div class="peer-legend" role="group" aria-label="Peer state legend">
-          <span><i class="legend-dot legend-dot--connected" aria-hidden="true"></i>Connected</span>
+          <span><i class="legend-dot legend-dot--connected" aria-hidden="true"></i>Browser live</span>
+          <span><i class="legend-dot legend-dot--kubo" aria-hidden="true"></i>Local Kubo observed</span>
           <span><i class="legend-dot legend-dot--discovered" aria-hidden="true"></i>Discovered</span>
           <span><i class="legend-dot legend-dot--disconnected" aria-hidden="true"></i>Disconnected</span>
         </div>
@@ -262,8 +267,8 @@
         </div>
         <ol class="peer-list" id="peer-list" aria-label="Observed IPFS peers"></ol>
         <p class="peer-empty" id="peer-empty">
-          No browser-reachable peers have been observed yet. Discovery can take a moment and
-          depends on the transports available to this browser.
+          No peers have been observed yet. Browser discovery can take a moment; local Kubo peers
+          appear after an explicit RPC probe with CORS enabled.
         </p>
         <div class="local-history">
           <p><strong>On-device history</strong><span id="history-count">Checking previous visits…</span></p>

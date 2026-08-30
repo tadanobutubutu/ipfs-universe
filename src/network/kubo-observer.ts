@@ -4,7 +4,13 @@ export interface KuboProbeResult {
   readonly localPeerId?: string;
   readonly observations: readonly PeerObservation[];
   readonly peerCount: number;
+  readonly truncated: boolean;
 }
+
+/** Maximum number of Kubo records admitted to the active browser view. */
+export const MAX_KUBO_PEERS = 1_024;
+/** Maximum JSON payload accepted from the local admin RPC. */
+export const MAX_KUBO_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 export class KuboProbeError extends Error {
   readonly code: 'cors' | 'http' | 'invalid' | 'unavailable';
@@ -29,21 +35,25 @@ export async function probeLocalKubo(
     kuboJson<{ ID?: string }>(origin, 'id', signal),
     kuboJson<{ Peers?: readonly KuboPeer[] }>(
       origin,
-      'swarm/peers?verbose=true',
+      'swarm/peers?verbose=true&latency=true&direction=true&streams=true&identify=true',
       signal,
     ),
   ]);
   const peers = Array.isArray(peersPayload.Peers) ? peersPayload.Peers : [];
   const observedAt = Date.now();
-  const observations = peers.flatMap((peer): PeerObservation[] => {
+  const importedPeers = peers.slice(0, MAX_KUBO_PEERS);
+  const observations = importedPeers.flatMap((peer): PeerObservation[] => {
     if (typeof peer.Peer !== 'string' || peer.Peer.trim() === '') return [];
+    const peerId = peer.Peer.trim();
+    const relayPeerId = relayPeerIdFromMultiaddr(peer.Addr);
     const measuredLatency = latencyMs(peer.Latency);
     return [
       {
         type: 'connected',
-        peerId: peer.Peer.trim(),
+        peerId,
         observedAt,
         source: 'kubo',
+        ...(relayPeerId === undefined ? {} : { relayPeerId }),
         direction: directionLabel(peer.Direction),
         transport: transportLabel(peer.Addr),
         protocols: protocolsFrom(peer),
@@ -58,7 +68,7 @@ export async function probeLocalKubo(
         : [
             {
               type: 'latency' as const,
-              peerId: peer.Peer.trim(),
+              peerId,
               observedAt,
               latencyMs: measuredLatency,
             },
@@ -69,6 +79,7 @@ export async function probeLocalKubo(
     localPeerId: typeof idPayload.ID === 'string' ? idPayload.ID : undefined,
     observations,
     peerCount: peers.length,
+    truncated: peers.length > importedPeers.length,
   };
 }
 
@@ -84,6 +95,12 @@ interface KuboPeer {
     readonly Protocols?: readonly unknown[];
     readonly Addresses?: readonly unknown[];
   };
+}
+
+function relayPeerIdFromMultiaddr(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const match = /\/p2p\/([^/]+)\/p2p-circuit(?:\/|$)/u.exec(value);
+  return match?.[1];
 }
 
 function protocolsFrom(peer: KuboPeer): readonly string[] | undefined {
@@ -139,10 +156,32 @@ async function kuboJson<T>(
     );
   }
   try {
-    return (await response.json()) as T;
-  } catch {
+    const declaredLength = Number(response.headers.get('content-length'));
+    if (
+      Number.isFinite(declaredLength) &&
+      declaredLength > MAX_KUBO_RESPONSE_BYTES
+    ) {
+      throw new KuboProbeError(
+        'invalid',
+        'Local Kubo response exceeded the safe size limit.',
+      );
+    }
+    const body = await response.text();
+    if (new TextEncoder().encode(body).byteLength > MAX_KUBO_RESPONSE_BYTES) {
+      throw new KuboProbeError(
+        'invalid',
+        'Local Kubo response exceeded the safe size limit.',
+      );
+    }
+    return JSON.parse(body) as T;
+  } catch (error) {
+    if (errorIsKuboProbeError(error)) throw error;
     throw new KuboProbeError('invalid', 'Local Kubo returned invalid JSON.');
   }
+}
+
+function errorIsKuboProbeError(value: unknown): value is KuboProbeError {
+  return value instanceof KuboProbeError;
 }
 
 function directionLabel(value: unknown): 'inbound' | 'outbound' | 'unknown' {

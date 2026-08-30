@@ -1,4 +1,4 @@
-import type { PeerRecord, PeerStatus } from '../network/peer-types';
+import type { PeerRecord, PeerSource, PeerStatus } from '../network/peer-types';
 
 type WasmNumberFunction = (...arguments_: number[]) => number;
 
@@ -15,6 +15,7 @@ export interface PhysicsWasm {
     latencyMs: number | undefined,
     relayIndex: number,
   ): void;
+  setPeerSource(index: number, source: PeerSource | undefined): void;
   step(deltaSeconds: number, count: number, motionScale: number): void;
   positions(count: number): Float32Array;
   layoutEdges(count: number): number;
@@ -51,6 +52,7 @@ export async function loadPhysicsWasm(
   const step = exportedFunction(instance, 'step');
   const positionsPointer = integerResult(instance, 'positions_ptr');
   const setPeerMetadata = exportedFunction(instance, 'set_peer_metadata');
+  const setPeerSource = exportedFunction(instance, 'set_peer_source');
   const layoutEdges = exportedFunction(instance, 'layout_edges');
   const edgePositionsPointer = integerResult(instance, 'edge_positions_ptr');
   const edgeColorsPointer = integerResult(instance, 'edge_colors_ptr');
@@ -72,7 +74,7 @@ export async function loadPhysicsWasm(
       seedNode(
         Math.trunc(index),
         Math.trunc(seed),
-        Math.min(44, Math.max(8, finiteOr(radius, 40))),
+        Math.min(76, Math.max(8, finiteOr(radius, 40))),
         Math.min(4, Math.max(0, Math.trunc(finiteOr(sector, 4)))),
       );
     },
@@ -83,6 +85,9 @@ export async function loadPhysicsWasm(
         finiteOr(latencyMs ?? -1, -1),
         Math.trunc(relayIndex),
       );
+    },
+    setPeerSource: (index, source) => {
+      setPeerSource(Math.trunc(index), sourceCode(source));
     },
     step: (deltaSeconds, count, motionScale) => {
       step(
@@ -266,6 +271,16 @@ function statusCode(status: PeerStatus): number {
     case 'disconnected':
       return 2;
   }
+}
+
+function sourceCode(source: PeerSource | undefined): number {
+  // The Zig kernel uses zero for the browser origin. `both` retains the
+  // browser line because the same peer has been observed by both sources.
+  return source === 'kubo'
+    ? 1
+    : source === 'browser' || source === 'both'
+      ? 0
+      : 2;
 }
 
 function clampCount(value: number, maximum: number): number {
