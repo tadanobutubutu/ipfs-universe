@@ -872,7 +872,17 @@ class ThreeUniverseScene implements UniverseScene {
     // putting diagnostics into the visible HUD. This is also useful when a
     // live network happens to report a narrow latency band.
     const now = performance.now();
-    if (forceDiagnostic || now - this.#lastPeerRadiiDiagnostic >= 1_000) {
+    // The radii string is a development-only QA seam. Rebuilding a 1,024-item
+    // comma-separated diagnostic every second would allocate and format far
+    // more text than the renderer needs, creating avoidable main-thread
+    // pauses during dense Kubo imports. Keep the initial forced snapshot for
+    // fixtures, and throttle recurring snapshots to small scenes.
+    if (
+      import.meta.env.DEV &&
+      (forceDiagnostic ||
+        (this.#peers.length <= 256 &&
+          now - this.#lastPeerRadiiDiagnostic >= 1_000))
+    ) {
       this.#canvas.dataset.peerRadii = this.#peers
         .map((_, index) => pointRadius(positions, index * 3).toFixed(2))
         .join(',');
