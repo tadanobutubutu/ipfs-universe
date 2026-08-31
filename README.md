@@ -90,6 +90,8 @@ Helia/libp2p ── typed observations ── PeerReducer (最大2,048)
        └── Zig: 配置・物理・線分バッファ / Rust: 集計
 ```
 
+Helia/libp2p のブラウザノードは module Web Worker（`peerstellation-helia`）で起動します。鍵生成、依存モジュール評価、transport 初期化、DHT探索、ping は描画用メインスレッドと分離され、Workerが使えないブラウザだけ厳密なメインスレッドfallbackへ切り替わります。
+
 秘密鍵、Kubo 認証情報、Pinata トークンはブラウザへ渡しません。CSP、COOP/COEP/CORP、HSTS、厳格な Permissions Policy、ハッシュ付き静的資産キャッシュを配信します。IPFS はプロトコル名として技術文書で扱いますが、製品名・ロゴは独自の **Peerstellation** に分離しました。名称は GitHub/npm/一般検索の完全一致を予備調査した結果であり、商標の法的なクリアランスを意味しません。
 
 ### ツールチェーンとThree UIの判断

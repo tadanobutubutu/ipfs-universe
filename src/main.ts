@@ -263,8 +263,19 @@ async function startNetworkObserver(): Promise<void> {
   shell.setNetworkState('loading', 'Opening a browser node…');
 
   try {
-    const { startHeliaObserver } = await import('./network/helia-observer');
-    const nextObserver = await startHeliaObserver();
+    let nextObserver: HeliaObserver;
+    try {
+      // Keep the large libp2p graph, key generation, and transport setup off
+      // the compositor thread. A direct main-thread fallback preserves
+      // compatibility with browsers that disable module workers.
+      const { startHeliaWorkerObserver } = await import(
+        './network/helia-worker-client'
+      );
+      nextObserver = await startHeliaWorkerObserver();
+    } catch {
+      const { startHeliaObserver } = await import('./network/helia-observer');
+      nextObserver = await startHeliaObserver();
+    }
     if (generation !== networkGeneration) {
       await nextObserver.stop();
       return;
