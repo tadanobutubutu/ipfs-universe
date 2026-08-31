@@ -35,6 +35,10 @@ describe('perspective observatory framing', () => {
     expect(fitBoundsRadius(new Float32Array())).toBe(0);
   });
 
+  it('caps wide-field framing so the observatory core stays prominent', () => {
+    expect(fitPerspectiveDistance(10_000, Math.PI / 4, 1.6, 1.2)).toBe(180);
+  });
+
   it('finds the furthest live peer radius without allocating vectors', () => {
     const points = new Float32Array([3, 4, 0, -8, 0, 6, 0, 0, 1]);
     expect(fitBoundsRadius(points)).toBeCloseTo(10, 6);

@@ -16,6 +16,7 @@ Peerstellation is a web-only 3D observatory for real Helia/libp2p observations. 
 - ノードをカーソルで指す、キーボードで選ぶ、スマホでタップする、とその場所にアンカーされたカードへ Peer ID、状態、遅延、方向、transport、protocols、agent/protocol version、アドレス件数を表示します。
 - 接続線はこの観測ノードから実際に開いているブラウザ接続です。`/p2p-circuit` のアドレスから中継ピアIDまで取得でき、同じ中継ピアが観測集合にも存在する場合だけ、ブラウザまたはKuboの実ノード同士の中継線を追加します。裏付けのない近接線は描かず、見栄えのためにトポロジーを捏造しません。
 - Zig WebAssembly は安定した全方位の配置と近遠の分布、Rust WebAssembly は接続数・遅延統計を担当し、軽い制御と表示は厳密な TypeScript で実装しています。ローカル Kubo の明示インポートは最大1,024件を3Dへ載せ、アプリ内の追跡上限は2,048件です。Kubo観測は無彩色の外周、ブラウザliveはライム、ブラウザ発見候補は紫で分けます。
+- ピア数が増えても自動フレーミングはワールド距離180を上限（縦長は145）にし、中心のホスト星が小さく潰れないまま外周ピアを視認・選択できます。
 
 ## Helia と IPFS Desktop の数字が違う理由
 
@@ -51,6 +52,7 @@ npm run dev
 | `npm run build` | Zig/Rust WASM と静的配布物を生成 |
 | `npm run check` | 型検査・単体テスト・本番ビルド |
 | `npm run quality` | Biome 2.5 のフォーマット・Lint・import整理を一括検査 |
+| `npm run security:semgrep` | Semgrep の自動セキュリティ検査 |
 | `npm run format` | Biomeでコードを整形 |
 | `npm run lint` | BiomeのLintだけを実行 |
 | `npm run test:e2e` | Playwright、axe、レスポンシブ、WebGPU → WebGL2 フォールバック |

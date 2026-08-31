@@ -1,5 +1,9 @@
 const MIN_CAMERA_DISTANCE = 28;
-const MAX_CAMERA_DISTANCE = 360;
+// Never let a dense import pull the camera so far back that the observatory
+// core becomes a speck. Nodes beyond this composition envelope remain
+// reachable through orbiting and the anchored picker, while the host star
+// keeps its visual weight at every density.
+const MAX_CAMERA_DISTANCE = 180;
 // Keep the observatory core visually present on narrow screens. The distance
 // is still derived from the full peer field; this is only a guard against a
 // single outer observation making every node a pinprick.

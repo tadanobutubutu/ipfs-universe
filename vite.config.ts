@@ -35,17 +35,33 @@ export default defineConfig({
     // the source of truth, and production should not ship several extra MB.
     sourcemap: false,
     // The WebGPU entry intentionally carries both the WebGPU and WebGL2
-    // backends for runtime fallback. It is lazy and cacheable, so keep an
-    // explicit 800 kB warning budget instead of treating this dual-backend
-    // asset as an initial-shell regression.
+    // backends for runtime fallback. It is lazy and cacheable, so keep the
+    // warning budget honest while splitting the network graph into cacheable
+    // transport/runtime chunks instead of hiding one oversized asset.
     chunkSizeWarningLimit: 800,
     rolldownOptions: {
       output: {
-        // Keep the WebGL renderer out of the first shell chunk. The scene is
-        // imported after the first paint, so this cacheable vendor asset can
-        // be fetched in parallel with the initial shell.
-        manualChunks: (id) =>
-          id.includes('/node_modules/three/') ? 'three-vendor' : null,
+        // Keep the render and network graphs out of the first shell chunk.
+        // They are imported after the first paint, so independent cacheable
+        // assets can be fetched in parallel without making Helia's large
+        // transport graph one monolithic warning-sized file.
+        manualChunks: (id) => {
+          if (id.includes('/node_modules/three/')) return 'three-vendor';
+          if (
+            id.includes('/node_modules/helia/') ||
+            id.includes('/node_modules/@helia/')
+          ) {
+            return 'helia-vendor';
+          }
+          if (
+            id.includes('/node_modules/@libp2p/') ||
+            id.includes('/node_modules/@chainsafe/') ||
+            id.includes('/node_modules/multiformats/')
+          ) {
+            return 'libp2p-vendor';
+          }
+          return null;
+        },
       },
     },
   },

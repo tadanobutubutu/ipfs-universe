@@ -52,6 +52,7 @@ import {
   fitPerspectiveDistance,
 } from './camera-fit';
 import { frameElapsedMs, simulationDeltaSeconds } from './frame-stats';
+import { normalizeGpuDuration } from './gpu-timing';
 import { QualityPolicy } from './quality-policy';
 
 const SCENE_NODE_LIMIT = 1_024;
@@ -91,6 +92,7 @@ export async function createUniverseScene(
     canvas,
     depth: true,
     powerPreference: 'high-performance',
+    trackTimestamp: true,
   });
   try {
     await renderer.init();
@@ -114,6 +116,10 @@ class ThreeUniverseScene implements UniverseScene {
   readonly #pulseBaseScale: number;
   readonly #pulseExpansion: number;
   readonly #dust: Points;
+  readonly #nebula: Points;
+  readonly #corona: Group;
+  #coronaPhase = 0;
+  #coronaDensityScale = 1;
   readonly #pulseRing: Mesh<TorusGeometry, MeshBasicMaterial>;
   readonly #connectedPeerMesh: InstancedMesh;
   readonly #discoveredPeerMesh: InstancedMesh;
@@ -161,6 +167,7 @@ class ThreeUniverseScene implements UniverseScene {
   // create avoidable garbage-collection pauses on lower-end devices.
   readonly #interactionWorld = new Vector3();
   #lastPerformanceSample = performance.now();
+  #gpuTimestampRequest?: Promise<void>;
   #lastPeerRadiiDiagnostic = 0;
   #lastInfoDrawCalls = 0;
   #lastFrameTime = performance.now();
@@ -215,6 +222,14 @@ class ThreeUniverseScene implements UniverseScene {
     // fog still gives distant peers depth, but 0.008 erased a 180-unit mobile
     // composition almost completely.
     this.#scene.fog = new FogExp2(0x050508, 0.0035);
+    // The nebula sits behind every measured marker and carries no network
+    // meaning. It exists so the observatory has volume: without it the deep
+    // field reads as flat black and the fog has nothing to attenuate.
+    this.#nebula = createNebulaField(mobileQuality ? 12 : 140, mobileQuality);
+    this.#nebula.visible = true;
+    this.#scene.add(this.#nebula);
+    this.#corona = createCoreCorona(mobileQuality);
+    this.#scene.add(this.#corona);
     this.#dust = createDecorativeDust(mobileQuality ? 480 : 2_400);
     // Mobile keeps the CSS sky and low-poly core as the first composition;
     // revealing the 2,400-point dust field later would spend the first input
@@ -291,6 +306,7 @@ class ThreeUniverseScene implements UniverseScene {
     this.#canvas.dataset.renderer = this.rendererName;
     this.#canvas.dataset.qualityTier = 'cinema';
     this.#canvas.dataset.drawCallMode = 'per-frame-average';
+    this.#canvas.dataset.gpuTimer = 'pending';
   }
 
   attachPhysics(physics: PhysicsWasm): void {
@@ -363,6 +379,7 @@ class ThreeUniverseScene implements UniverseScene {
     this.#core.scale.setScalar(
       coreScaleForPeerCount(this.#coreScale, visible.length),
     );
+    this.#coronaDensityScale = 1 + Math.min(0.22, visible.length / 4_800);
     this.#connectedPeerMesh.count = visible.filter(isBrowserLivePeer).length;
     this.#connectedPeerMesh.visible = this.#connectedPeerMesh.count > 0;
     this.#kuboPeerMesh.count = visible.filter(isKuboObservedPeer).length;
@@ -617,6 +634,13 @@ class ThreeUniverseScene implements UniverseScene {
         this.#kuboOrbit.rotation.z -= delta * 0.006;
       }
       this.#dust.rotation.y -= delta * 0.004;
+      // Three depth layers drift at different rates. The parallax is what makes
+      // the field read as volume rather than a flat backdrop.
+      this.#nebula.rotation.y += delta * 0.0016;
+      this.#nebula.rotation.z -= delta * 0.0008;
+      this.#coronaPhase += delta;
+      const breathe = 1 + Math.sin(this.#coronaPhase * 0.55) * 0.045;
+      this.#corona.scale.setScalar(breathe * this.#coronaDensityScale);
     }
     this.#updatePulse(frameTime);
     this.#updateCamera(this.#motionPaused);
@@ -754,11 +778,22 @@ class ThreeUniverseScene implements UniverseScene {
         this.#edgeColor
           .copy(EDGE_COLOR)
           .multiplyScalar(edgeBrightness(peer.latencyMs));
+        // A light pulse travels core -> peer along each measured link. Only the
+        // per-endpoint brightness moves; the endpoints themselves stay pinned to
+        // the observed geometry, so the pulse can never imply an unmeasured
+        // topology. Motion-paused renders keep a steady gradient.
+        const pulsePhase = this.#motionPaused
+          ? 0
+          : this.#coronaPhase * 1.6 +
+            unitFromInteger(hashPeerId(peer.peerId)) * Math.PI * 2;
         for (let endpoint = 0; endpoint < 2; endpoint += 1) {
           const colorOffset = edgeOffset + endpoint * 3;
-          this.#edgeColors[colorOffset] = this.#edgeColor.r;
-          this.#edgeColors[colorOffset + 1] = this.#edgeColor.g;
-          this.#edgeColors[colorOffset + 2] = this.#edgeColor.b;
+          const travel = this.#motionPaused
+            ? 1
+            : 0.72 + Math.sin(pulsePhase - endpoint * 1.9) * 0.28;
+          this.#edgeColors[colorOffset] = this.#edgeColor.r * travel;
+          this.#edgeColors[colorOffset + 1] = this.#edgeColor.g * travel;
+          this.#edgeColors[colorOffset + 2] = this.#edgeColor.b * travel;
         }
         edgeCount += 1;
       }
@@ -1051,6 +1086,29 @@ class ThreeUniverseScene implements UniverseScene {
     };
   }
 
+  #sampleGpuTimestamp(): void {
+    if (this.#gpuTimestampRequest !== undefined) return;
+    this.#gpuTimestampRequest = this.#renderer
+      .resolveTimestampsAsync('render')
+      .then((duration) => {
+        const normalized = normalizeGpuDuration(duration);
+        if (normalized === undefined) {
+          this.#canvas.dataset.gpuTimer = 'unavailable';
+          delete this.#canvas.dataset.gpuTimeMs;
+          return;
+        }
+        this.#canvas.dataset.gpuTimer = 'timestamp-query';
+        this.#canvas.dataset.gpuTimeMs = normalized.toFixed(2);
+      })
+      .catch(() => {
+        this.#canvas.dataset.gpuTimer = 'unavailable';
+        delete this.#canvas.dataset.gpuTimeMs;
+      })
+      .finally(() => {
+        this.#gpuTimestampRequest = undefined;
+      });
+  }
+
   #samplePerformance(): void {
     this.#sampledFrames += 1;
     const now = performance.now();
@@ -1106,6 +1164,7 @@ class ThreeUniverseScene implements UniverseScene {
     this.#canvas.dataset.drawCallMode = 'per-frame-average';
     this.#canvas.dataset.sceneObjects = String(this.#scene.children.length);
     this.#canvas.dataset.pixelRatio = this.#pixelRatio.toFixed(2);
+    this.#sampleGpuTimestamp();
     this.#lastPerformanceSample = now;
     this.#sampledFrames = 0;
   }
@@ -1796,4 +1855,131 @@ function disposeMaterial(material: Material | Material[]): void {
     textured.map?.dispose();
     entry.dispose();
   });
+}
+
+/**
+ * Build a soft volumetric sprite used by the nebula field. Generating it on a
+ * canvas keeps the deployment free of external assets and works identically on
+ * the WebGPU and WebGL2 backends.
+ */
+function createNebulaSprite(): CanvasTexture | undefined {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (context === null) {
+    return undefined;
+  }
+  const half = size / 2;
+  const gradient = context.createRadialGradient(
+    half,
+    half,
+    0,
+    half,
+    half,
+    half,
+  );
+  gradient.addColorStop(0, 'rgba(255,255,255,0.42)');
+  gradient.addColorStop(0.28, 'rgba(255,255,255,0.20)');
+  gradient.addColorStop(0.62, 'rgba(255,255,255,0.06)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, size, size);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * A deep field of large, faint additive billboards. The cloud carries no
+ * network meaning: it exists purely to give the observatory volume and depth
+ * behind the measured nodes, and never occludes an evidence-backed marker
+ * because it renders with additive blending and no depth write.
+ */
+function createNebulaField(count: number, mobileQuality = false): Points {
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const uvs = new Float32Array(count * 2);
+  uvs.fill(0.5);
+  const deep = new Color(0x24456f);
+  const aurora = new Color(0x2b9083);
+  const violet = new Color(0x4d3c8c);
+  let state = 0x2f6e5b;
+  for (let index = 0; index < count; index += 1) {
+    state = xorshift(state);
+    const radius = 58 + unitFromInteger(state) * 178;
+    state = xorshift(state);
+    const theta = unitFromInteger(state) * Math.PI * 2;
+    state = xorshift(state);
+    // Flatten the cloud slightly so it reads as a galactic plane rather than a
+    // uniform shell, which gives the camera a horizon to orbit against.
+    const cosinePhi = (unitFromInteger(state) * 2 - 1) * 0.62;
+    const sinePhi = Math.sqrt(Math.max(0, 1 - cosinePhi * cosinePhi));
+    const offset = index * 3;
+    positions[offset] = radius * sinePhi * Math.cos(theta);
+    positions[offset + 1] = radius * cosinePhi;
+    positions[offset + 2] = radius * sinePhi * Math.sin(theta);
+    const sample = unitFromInteger(xorshift(state ^ 0x5bd1e995));
+    const color = sample > 0.66 ? aurora : sample > 0.33 ? violet : deep;
+    const luminance =
+      0.35 + unitFromInteger(xorshift(state ^ 0x27d4eb2f)) * 0.65;
+    colors[offset] = color.r * luminance;
+    colors[offset + 1] = color.g * luminance;
+    colors[offset + 2] = color.b * luminance;
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new BufferAttribute(colors, 3));
+  geometry.setAttribute('uv', new BufferAttribute(uvs, 2));
+  const material = new PointsMaterial({
+    vertexColors: true,
+    size: mobileQuality ? 72 : 142,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: mobileQuality ? 0.28 : 0.62,
+    blending: AdditiveBlending,
+    map: createNebulaSprite(),
+    depthWrite: false,
+  });
+  material.toneMapped = false;
+  return new Points(geometry, material);
+}
+
+/**
+ * Layered additive shells around the observer core. They read as a corona and
+ * keep the local browser identity as the brightest object in frame even when a
+ * Kubo import fills the outer field with hundreds of markers.
+ */
+function createCoreCorona(mobileQuality: boolean): Group {
+  const corona = new Group();
+  const layers: readonly (readonly [number, number, number])[] = mobileQuality
+    ? [[5.4, 0.052, 0x73fbd3]]
+    : [
+        [5.6, 0.055, 0x73fbd3],
+        [8.4, 0.032, 0x9fe8ff],
+        [12.6, 0.018, 0xa897ff],
+      ];
+  for (const [radius, opacity, color] of layers) {
+    const shell = new Mesh(
+      new SphereGeometry(
+        radius,
+        mobileQuality ? 12 : 20,
+        mobileQuality ? 8 : 14,
+      ),
+      new MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        side: BackSide,
+        blending: AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    shell.material.toneMapped = false;
+    shell.material.fog = false;
+    corona.add(shell);
+  }
+  return corona;
 }
