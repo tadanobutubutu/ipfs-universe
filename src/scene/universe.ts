@@ -146,6 +146,7 @@ class ThreeUniverseScene implements UniverseScene {
   #peerSignature = '';
   #frameRequest?: number;
   #disposed = false;
+  #rendererDisposed = false;
   #motionPaused = false;
   #pointerId?: number;
   #pointerX = 0;
@@ -168,6 +169,7 @@ class ThreeUniverseScene implements UniverseScene {
   readonly #interactionWorld = new Vector3();
   #lastPerformanceSample = performance.now();
   #gpuTimestampRequest?: Promise<void>;
+  #lastGpuTimestampAt = 0;
   #lastPeerRadiiDiagnostic = 0;
   #lastInfoDrawCalls = 0;
   #lastFrameTime = performance.now();
@@ -467,7 +469,22 @@ class ThreeUniverseScene implements UniverseScene {
       }
     });
     this.#edgeGeometry.dispose();
-    this.#renderer.dispose();
+    const pendingGpuTimestamp = this.#gpuTimestampRequest;
+    const disposeRenderer = (): void => {
+      if (this.#rendererDisposed) return;
+      this.#rendererDisposed = true;
+      this.#renderer.dispose();
+    };
+    if (pendingGpuTimestamp === undefined) {
+      disposeRenderer();
+    } else {
+      // WebGPU resolves timestamp buffers asynchronously. Disposing the
+      // renderer while the buffer is still mapped causes a noisy AbortError
+      // in Chromium; defer disposal until the query settles instead.
+      void pendingGpuTimestamp
+        .catch(() => undefined)
+        .finally(disposeRenderer);
+    }
   }
 
   #trackArrivals(
@@ -651,6 +668,11 @@ class ThreeUniverseScene implements UniverseScene {
     this.#refreshInteractionPosition();
     this.#animatedFrames += 1;
     this.#renderScene();
+    // Timestamp queries are deliberately sampled less often than frames. A
+    // bounded cadence keeps the diagnostic useful while avoiding a query and
+    // promise allocation on every render (which can itself create CPU hitches
+    // on WebGPU implementations).
+    this.#sampleGpuTimestamp(frameTime);
     this.#samplePerformance();
 
     if (!this.#motionPaused) {
@@ -1089,11 +1111,18 @@ class ThreeUniverseScene implements UniverseScene {
     };
   }
 
-  #sampleGpuTimestamp(): void {
-    if (this.#gpuTimestampRequest !== undefined) return;
+  #sampleGpuTimestamp(now = performance.now()): void {
+    if (
+      this.#gpuTimestampRequest !== undefined ||
+      now - this.#lastGpuTimestampAt < 500
+    ) {
+      return;
+    }
+    this.#lastGpuTimestampAt = now;
     this.#gpuTimestampRequest = this.#renderer
       .resolveTimestampsAsync('render')
       .then((duration) => {
+        if (this.#disposed) return;
         const normalized = normalizeGpuDuration(duration);
         if (normalized === undefined) {
           this.#canvas.dataset.gpuTimer = 'unavailable';
@@ -1101,6 +1130,7 @@ class ThreeUniverseScene implements UniverseScene {
           delete this.#canvas.dataset.gpuTimeP50;
           delete this.#canvas.dataset.gpuTimeP95;
           delete this.#canvas.dataset.gpuTimeMax;
+          delete this.#canvas.dataset.gpuTimeSamples;
           return;
         }
         this.#gpuDurationSamples[this.#gpuDurationCursor] = normalized;
@@ -1118,6 +1148,7 @@ class ThreeUniverseScene implements UniverseScene {
         this.#canvas.dataset.gpuTimeP50 = stats.p50.toFixed(2);
         this.#canvas.dataset.gpuTimeP95 = stats.p95.toFixed(2);
         this.#canvas.dataset.gpuTimeMax = stats.max.toFixed(2);
+        this.#canvas.dataset.gpuTimeSamples = String(this.#gpuDurationCount);
       })
       .catch(() => {
         this.#canvas.dataset.gpuTimer = 'unavailable';
@@ -1125,6 +1156,7 @@ class ThreeUniverseScene implements UniverseScene {
         delete this.#canvas.dataset.gpuTimeP50;
         delete this.#canvas.dataset.gpuTimeP95;
         delete this.#canvas.dataset.gpuTimeMax;
+        delete this.#canvas.dataset.gpuTimeSamples;
       })
       .finally(() => {
         this.#gpuTimestampRequest = undefined;
@@ -1186,7 +1218,6 @@ class ThreeUniverseScene implements UniverseScene {
     this.#canvas.dataset.drawCallMode = 'per-frame-average';
     this.#canvas.dataset.sceneObjects = String(this.#scene.children.length);
     this.#canvas.dataset.pixelRatio = this.#pixelRatio.toFixed(2);
-    this.#sampleGpuTimestamp();
     this.#lastPerformanceSample = now;
     this.#sampledFrames = 0;
   }

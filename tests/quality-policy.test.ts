@@ -62,4 +62,15 @@ describe('symmetric render quality policy', () => {
     expect(decision.changed).toBe(true);
     expect(decision.tier).toBe('balanced');
   });
+
+  it('catches non-adjacent compositor spikes in the rolling sample window', () => {
+    const policy = new QualityPolicy();
+
+    policy.observe({ frameP95Ms: 10, frameMaxMs: 21 });
+    policy.observe({ frameP95Ms: 10, frameMaxMs: 10 });
+    const decision = policy.observe({ frameP95Ms: 10, frameMaxMs: 21 });
+
+    expect(decision.changed).toBe(true);
+    expect(decision.tier).toBe('balanced');
+  });
 });

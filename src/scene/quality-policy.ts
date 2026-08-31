@@ -30,6 +30,8 @@ const PIXEL_RATIO_SCALES: Record<QualityTier, number> = {
 const DEFAULT_TARGET_MS = 16.7;
 const DOWNGRADE_THRESHOLD = 1.25;
 const SPIKE_THRESHOLD = 1.2;
+const SPIKE_WINDOW_SIZE = 5;
+const SPIKE_WINDOW_REQUIRED = 2;
 const RECOVERY_THRESHOLD = 0.7;
 const DOWNGRADE_STREAK = 2;
 const RECOVERY_STREAK = 3;
@@ -39,6 +41,12 @@ export class QualityPolicy {
   #tierIndex = 0;
   #overBudgetStreak = 0;
   #recoveryStreak = 0;
+  // A two-second sample can contain a single compositor hitch. Keep a short
+  // rolling window of spike observations so repeated, non-adjacent hitches
+  // are still actionable without downgrading for one isolated frame.
+  readonly #spikeHistory = new Uint8Array(SPIKE_WINDOW_SIZE);
+  #spikeHistoryCount = 0;
+  #spikeHistoryCursor = 0;
 
   constructor(targetMs = DEFAULT_TARGET_MS) {
     this.#targetMs =
@@ -60,8 +68,25 @@ export class QualityPolicy {
       frameMax !== undefined &&
       Number.isFinite(frameMax) &&
       frameMax > this.#targetMs * SPIKE_THRESHOLD;
-    if (p95 > this.#targetMs * DOWNGRADE_THRESHOLD || spike) {
-      this.#overBudgetStreak += 1;
+    this.#spikeHistory[this.#spikeHistoryCursor] = spike ? 1 : 0;
+    this.#spikeHistoryCursor =
+      (this.#spikeHistoryCursor + 1) % SPIKE_WINDOW_SIZE;
+    this.#spikeHistoryCount = Math.min(
+      this.#spikeHistoryCount + 1,
+      SPIKE_WINDOW_SIZE,
+    );
+    let recentSpikes = 0;
+    for (let index = 0; index < this.#spikeHistoryCount; index += 1) {
+      recentSpikes += this.#spikeHistory[index] ?? 0;
+    }
+    const repeatedSpike = spike && recentSpikes >= SPIKE_WINDOW_REQUIRED;
+    if (p95 > this.#targetMs * DOWNGRADE_THRESHOLD || repeatedSpike) {
+      // A repeated spike is already two independent observations in the
+      // rolling window; count it as a complete downgrade signal even when a
+      // healthy sample sits between the two hitches.
+      this.#overBudgetStreak = repeatedSpike
+        ? DOWNGRADE_STREAK
+        : this.#overBudgetStreak + 1;
       this.#recoveryStreak = 0;
       if (
         this.#overBudgetStreak >= DOWNGRADE_STREAK &&
