@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeGpuDuration } from '../src/scene/gpu-timing';
+import {
+  gpuDurationStats,
+  normalizeGpuDuration,
+} from '../src/scene/gpu-timing';
 
 describe('GPU timing telemetry', () => {
   it('keeps finite non-negative durations in milliseconds', () => {
@@ -12,5 +15,14 @@ describe('GPU timing telemetry', () => {
     expect(normalizeGpuDuration(undefined)).toBeUndefined();
     expect(normalizeGpuDuration(Number.NaN)).toBeUndefined();
     expect(normalizeGpuDuration(-1)).toBeUndefined();
+  });
+
+  it('summarizes a bounded GPU sample window like CPU telemetry', () => {
+    expect(gpuDurationStats([1, 4, 2, 8, 3])).toEqual({
+      p50: 3,
+      p95: 8,
+      max: 8,
+    });
+    expect(gpuDurationStats([])).toEqual({ p50: 0, p95: 0, max: 0 });
   });
 });

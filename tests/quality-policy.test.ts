@@ -52,4 +52,14 @@ describe('symmetric render quality policy', () => {
     expect(decision.tier).toBe('balanced');
     expect(decision.reason).toBe('over-budget');
   });
+
+  it('catches a repeated 20ms-class compositor spike', () => {
+    const policy = new QualityPolicy();
+
+    policy.observe({ frameP95Ms: 10, frameMaxMs: 20.5 });
+    const decision = policy.observe({ frameP95Ms: 10, frameMaxMs: 20.5 });
+
+    expect(decision.changed).toBe(true);
+    expect(decision.tier).toBe('balanced');
+  });
 });

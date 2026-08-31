@@ -52,7 +52,7 @@ import {
   fitPerspectiveDistance,
 } from './camera-fit';
 import { frameElapsedMs, simulationDeltaSeconds } from './frame-stats';
-import { normalizeGpuDuration } from './gpu-timing';
+import { gpuDurationStats, normalizeGpuDuration } from './gpu-timing';
 import { QualityPolicy } from './quality-policy';
 
 const SCENE_NODE_LIMIT = 1_024;
@@ -175,8 +175,11 @@ class ThreeUniverseScene implements UniverseScene {
   readonly #qualityPolicy = new QualityPolicy();
   readonly #frameDurationSamples = new Float32Array(120);
   readonly #frameDurationScratch = new Float32Array(120);
+  readonly #gpuDurationSamples = new Float32Array(60);
   #frameDurationCount = 0;
   #frameDurationCursor = 0;
+  #gpuDurationCount = 0;
+  #gpuDurationCursor = 0;
   #animatedFrames = 0;
   #renderedFrames = 0;
   #pixelRatio: number;
@@ -1095,14 +1098,33 @@ class ThreeUniverseScene implements UniverseScene {
         if (normalized === undefined) {
           this.#canvas.dataset.gpuTimer = 'unavailable';
           delete this.#canvas.dataset.gpuTimeMs;
+          delete this.#canvas.dataset.gpuTimeP50;
+          delete this.#canvas.dataset.gpuTimeP95;
+          delete this.#canvas.dataset.gpuTimeMax;
           return;
         }
+        this.#gpuDurationSamples[this.#gpuDurationCursor] = normalized;
+        this.#gpuDurationCursor =
+          (this.#gpuDurationCursor + 1) % this.#gpuDurationSamples.length;
+        this.#gpuDurationCount = Math.min(
+          this.#gpuDurationCount + 1,
+          this.#gpuDurationSamples.length,
+        );
+        const stats = gpuDurationStats(
+          this.#gpuDurationSamples.subarray(0, this.#gpuDurationCount),
+        );
         this.#canvas.dataset.gpuTimer = 'timestamp-query';
         this.#canvas.dataset.gpuTimeMs = normalized.toFixed(2);
+        this.#canvas.dataset.gpuTimeP50 = stats.p50.toFixed(2);
+        this.#canvas.dataset.gpuTimeP95 = stats.p95.toFixed(2);
+        this.#canvas.dataset.gpuTimeMax = stats.max.toFixed(2);
       })
       .catch(() => {
         this.#canvas.dataset.gpuTimer = 'unavailable';
         delete this.#canvas.dataset.gpuTimeMs;
+        delete this.#canvas.dataset.gpuTimeP50;
+        delete this.#canvas.dataset.gpuTimeP95;
+        delete this.#canvas.dataset.gpuTimeMax;
       })
       .finally(() => {
         this.#gpuTimestampRequest = undefined;

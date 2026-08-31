@@ -104,7 +104,7 @@ Three.js自身はブラウザのWebGPU/WebGL APIを呼び出すJavaScriptライ�
 
 GPU手続き生成のシネマティック作品 [ABYSSAL / natural-disasters](https://github.com/Token-Gremlin/natural-disasters) の品質プリセット、動的な負荷計測、決定的な実機スクリーンショットという設計思想を参考にしました。Peerstellationのノード配置、到着演出、色、UI、WASM ABI、コード、シェーダー、文章、命名は独自に実装しており、参照リポジトリのソースは取り込んでいません。ABYSSALはMITライセンスで公開されていますが、Peerstellationの観測対象は実際に取得したHelia/libp2p情報だけに限定されます。
 
-品質は一方向の「軽量化」ではなく、120フレームのp95と最大フレーム時間を基準に `cinema → balanced → efficient → still` を往復します。p95が目標の1.25倍を超えるか、約25.1ms（16.7msの1.5倍）を超えるスパイクが連続するとピクセル比と星屑の描画数を下げ、十分な余裕が続けば一段ずつ戻します。新しいピアは discovery → ping → link → settle → reframe の段階を持ち、線分は `link` 以降だけを実測位置へ伸ばします。これらの状態はCanvasの診断属性にも残り、実機テストで視覚状態と計測値を同時に検証できます。
+品質は一方向の「軽量化」ではなく、120フレームのp95と最大フレーム時間を基準に `cinema → balanced → efficient → still` を往復します。p95が目標の1.25倍を超えるか、約20.0ms（16.7msの1.2倍）を超えるスパイクが連続するとピクセル比と星屑の描画数を下げ、十分な余裕が続けば一段ずつ戻します。GPUはThree.jsのtimestamp-queryが利用できる場合、直近値とp50/p95/maxを別々にCanvas診断属性へ残します。新しいピアは discovery → ping → link → settle → reframe の段階を持ち、線分は `link` 以降だけを実測位置へ伸ばします。これらの状態はCanvasの診断属性にも残り、実機テストで視覚状態と計測値を同時に検証できます。
 
 ## 無料運用と収益化の境界
 

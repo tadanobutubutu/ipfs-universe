@@ -29,7 +29,7 @@ const PIXEL_RATIO_SCALES: Record<QualityTier, number> = {
 
 const DEFAULT_TARGET_MS = 16.7;
 const DOWNGRADE_THRESHOLD = 1.25;
-const SPIKE_THRESHOLD = 1.5;
+const SPIKE_THRESHOLD = 1.2;
 const RECOVERY_THRESHOLD = 0.7;
 const DOWNGRADE_STREAK = 2;
 const RECOVERY_STREAK = 3;
