@@ -30,6 +30,7 @@ const PIXEL_RATIO_SCALES: Record<QualityTier, number> = {
 const DEFAULT_TARGET_MS = 16.7;
 const DOWNGRADE_THRESHOLD = 1.25;
 const SPIKE_THRESHOLD = 1.2;
+const SEVERE_SPIKE_THRESHOLD = 1.6;
 const SPIKE_WINDOW_SIZE = 5;
 const SPIKE_WINDOW_REQUIRED = 2;
 const RECOVERY_THRESHOLD = 0.7;
@@ -68,6 +69,10 @@ export class QualityPolicy {
       frameMax !== undefined &&
       Number.isFinite(frameMax) &&
       frameMax > this.#targetMs * SPIKE_THRESHOLD;
+    const severeSpike =
+      frameMax !== undefined &&
+      Number.isFinite(frameMax) &&
+      frameMax > this.#targetMs * SEVERE_SPIKE_THRESHOLD;
     this.#spikeHistory[this.#spikeHistoryCursor] = spike ? 1 : 0;
     this.#spikeHistoryCursor =
       (this.#spikeHistoryCursor + 1) % SPIKE_WINDOW_SIZE;
@@ -80,13 +85,18 @@ export class QualityPolicy {
       recentSpikes += this.#spikeHistory[index] ?? 0;
     }
     const repeatedSpike = spike && recentSpikes >= SPIKE_WINDOW_REQUIRED;
-    if (p95 > this.#targetMs * DOWNGRADE_THRESHOLD || repeatedSpike) {
+    if (
+      p95 > this.#targetMs * DOWNGRADE_THRESHOLD ||
+      repeatedSpike ||
+      severeSpike
+    ) {
       // A repeated spike is already two independent observations in the
       // rolling window; count it as a complete downgrade signal even when a
       // healthy sample sits between the two hitches.
-      this.#overBudgetStreak = repeatedSpike
-        ? DOWNGRADE_STREAK
-        : this.#overBudgetStreak + 1;
+      this.#overBudgetStreak =
+        repeatedSpike || severeSpike
+          ? DOWNGRADE_STREAK
+          : this.#overBudgetStreak + 1;
       this.#recoveryStreak = 0;
       if (
         this.#overBudgetStreak >= DOWNGRADE_STREAK &&

@@ -63,6 +63,15 @@ describe('symmetric render quality policy', () => {
     expect(decision.tier).toBe('balanced');
   });
 
+  it('downgrades immediately for a severe compositor stall', () => {
+    const policy = new QualityPolicy();
+
+    const decision = policy.observe({ frameP95Ms: 10, frameMaxMs: 27 });
+
+    expect(decision.changed).toBe(true);
+    expect(decision.tier).toBe('balanced');
+  });
+
   it('catches non-adjacent compositor spikes in the rolling sample window', () => {
     const policy = new QualityPolicy();
 
