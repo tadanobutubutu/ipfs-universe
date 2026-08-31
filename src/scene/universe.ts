@@ -481,9 +481,7 @@ class ThreeUniverseScene implements UniverseScene {
       // WebGPU resolves timestamp buffers asynchronously. Disposing the
       // renderer while the buffer is still mapped causes a noisy AbortError
       // in Chromium; defer disposal until the query settles instead.
-      void pendingGpuTimestamp
-        .catch(() => undefined)
-        .finally(disposeRenderer);
+      void pendingGpuTimestamp.catch(() => undefined).finally(disposeRenderer);
     }
   }
 
