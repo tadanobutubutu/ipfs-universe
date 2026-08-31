@@ -28,6 +28,8 @@ import {
   type Renderer,
   Scene,
   SphereGeometry,
+  Sprite,
+  SpriteMaterial,
   SRGBColorSpace,
   type Texture,
   TorusGeometry,
@@ -116,7 +118,7 @@ class ThreeUniverseScene implements UniverseScene {
   readonly #pulseBaseScale: number;
   readonly #pulseExpansion: number;
   readonly #dust: Points;
-  readonly #nebula: Points;
+  readonly #nebula: Group;
   readonly #corona: Group;
   #coronaPhase = 0;
   #coronaDensityScale = 1;
@@ -462,7 +464,8 @@ class ThreeUniverseScene implements UniverseScene {
       if (
         object instanceof Mesh ||
         object instanceof Points ||
-        object instanceof Line
+        object instanceof Line ||
+        object instanceof Sprite
       ) {
         object.geometry.dispose();
         disposeMaterial(object.material);
@@ -1899,7 +1902,8 @@ function countVisibleRenderables(scene: Scene): number {
       object.type === 'Mesh' ||
       object.type === 'Line' ||
       object.type === 'LineSegments' ||
-      object.type === 'Points'
+      object.type === 'Points' ||
+      object.type === 'Sprite'
     ) {
       count += 1;
     }
@@ -1958,7 +1962,7 @@ function createNebulaSprite(): CanvasTexture | undefined {
  * behind the measured nodes, and never occludes an evidence-backed marker
  * because it renders with additive blending and no depth write.
  */
-function createNebulaField(count: number, mobileQuality = false): Points {
+function createNebulaField(count: number, mobileQuality = false): Group {
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const uvs = new Float32Array(count * 2);
@@ -2005,7 +2009,30 @@ function createNebulaField(count: number, mobileQuality = false): Points {
     depthWrite: false,
   });
   material.toneMapped = false;
-  return new Points(geometry, material);
+  const field = new Group();
+  field.add(new Points(geometry, material));
+
+  // A single broad, camera-facing cloud supplies the continuous density
+  // gradient that particles alone cannot provide. It is deliberately faint,
+  // additive, and non-depth-writing so measured markers remain the only
+  // semantic objects in the scene.
+  const cloudTexture = createNebulaSprite();
+  if (cloudTexture !== undefined) {
+    const cloudMaterial = new SpriteMaterial({
+      blending: AdditiveBlending,
+      color: mobileQuality ? 0x24456f : 0x315a92,
+      depthWrite: false,
+      map: cloudTexture,
+      opacity: mobileQuality ? 0.08 : 0.12,
+      transparent: true,
+    });
+    cloudMaterial.toneMapped = false;
+    const cloud = new Sprite(cloudMaterial);
+    cloud.position.set(0, 0, -96);
+    cloud.scale.set(mobileQuality ? 170 : 320, mobileQuality ? 125 : 235, 1);
+    field.add(cloud);
+  }
+  return field;
 }
 
 /**

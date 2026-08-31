@@ -575,7 +575,13 @@ test('exercises adaptive quality recovery in a real browser runtime', async ({
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
   const result = await page.evaluate(async () => {
-    const { QualityPolicy } = await import('/src/scene/quality-policy.ts');
+    const moduleUrl = new URL(
+      '/src/scene/quality-policy.ts',
+      window.location.origin,
+    );
+    const { QualityPolicy } = (await import(
+      moduleUrl.href
+    )) as typeof import('../../src/scene/quality-policy');
     const policy = new QualityPolicy();
     policy.observe({ frameP95Ms: 28 });
     const downgrade = policy.observe({ frameP95Ms: 28 });
