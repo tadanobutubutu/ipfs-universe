@@ -1,5 +1,9 @@
 # Peerstellation
 
+
+<!-- AUTO-PACKAGE-BADGES:START -->
+
+<!-- AUTO-PACKAGE-BADGES:END -->
 ![Peerstellation live peer observatory](./public/hero.png)
 
 > **A browser's reachable neighbourhood, rendered as a living sky.**
