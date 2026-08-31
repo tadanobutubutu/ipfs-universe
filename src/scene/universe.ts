@@ -1968,6 +1968,42 @@ function createNebulaSprite(): CanvasTexture | undefined {
 }
 
 /**
+ * Point sprites need a gentler alpha shoulder than the broad cloud. A steep
+ * shoulder makes additive particles read as a field of tiny billboards when
+ * they overlap the bright core corona; the longer falloff keeps that region
+ * continuous without adding another draw call.
+ */
+function createNebulaParticleSprite(): CanvasTexture | undefined {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (context === null) {
+    return undefined;
+  }
+  const half = size / 2;
+  const gradient = context.createRadialGradient(
+    half,
+    half,
+    0,
+    half,
+    half,
+    half,
+  );
+  gradient.addColorStop(0, 'rgba(255,255,255,0.22)');
+  gradient.addColorStop(0.2, 'rgba(255,255,255,0.15)');
+  gradient.addColorStop(0.46, 'rgba(255,255,255,0.055)');
+  gradient.addColorStop(0.72, 'rgba(255,255,255,0.012)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, size, size);
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
+/**
  * A deep field of large, faint additive billboards. The cloud carries no
  * network meaning: it exists purely to give the observatory volume and depth
  * behind the measured nodes, and never occludes an evidence-backed marker
@@ -2016,7 +2052,7 @@ function createNebulaField(count: number, mobileQuality = false): Group {
     transparent: true,
     opacity: mobileQuality ? 0.28 : 0.62,
     blending: AdditiveBlending,
-    map: createNebulaSprite(),
+    map: createNebulaParticleSprite(),
     depthWrite: false,
   });
   material.toneMapped = false;
