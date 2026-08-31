@@ -149,6 +149,10 @@ async function startScene(): Promise<void> {
       const devWindow = window as Window & {
         __peerstellationFreezePeers?: boolean;
         __peerstellationSetPeers?: (peers: readonly PeerRecord[]) => void;
+        __peerstellationObserveQuality?: (sample: {
+          frameP95Ms: number;
+          frameMaxMs?: number;
+        }) => void;
       };
       devWindow.__peerstellationFreezePeers = false;
       devWindow.__peerstellationSetPeers = (peers) => {
@@ -158,6 +162,9 @@ async function startScene(): Promise<void> {
         // still-empty live state midway through a visual test.
         devWindow.__peerstellationFreezePeers = true;
         universe?.setPeers(peers);
+      };
+      devWindow.__peerstellationObserveQuality = (sample) => {
+        universe?.observeQuality(sample);
       };
     }
   } catch {
