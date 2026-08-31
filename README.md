@@ -120,7 +120,7 @@ Three.js自身はブラウザのWebGPU/WebGL APIを呼び出すJavaScriptライ�
 
 GPU手続き生成のシネマティック作品 [ABYSSAL / natural-disasters](https://github.com/Token-Gremlin/natural-disasters) の品質プリセット、動的な負荷計測、決定的な実機スクリーンショットという設計思想を参考にしました。Peerstellationのノード配置、到着演出、色、UI、WASM ABI、コード、シェーダー、文章、命名は独自に実装しており、参照リポジトリのソースは取り込んでいません。ABYSSALはMITライセンスで公開されていますが、Peerstellationの観測対象は実際に取得したHelia/libp2p情報だけに限定されます。
 
-品質は一方向の「軽量化」ではなく、120フレームのp95と最大フレーム時間を基準に `cinema → balanced → efficient → still` を往復します。p95が目標の1.25倍を超えた場合、または約20.0ms（16.7msの1.2倍）超のスパイクを直近5回中2回検出した場合にピクセル比と星屑の描画数を下げます。最大フレームは同じ窓のp50 cadenceを使って正規化し、60Hzの正確な2ティックや低リフレッシュの量子化を深刻な停止と誤認しません。GPUはThree.jsのtimestamp-queryが利用できる場合、約500ms間隔で直近値、サンプル数、p50/p95/maxを別々にCanvas診断属性へ残します。新しいピアは discovery → ping → link → settle → reframe の段階を持ち、線分は `link` 以降だけを実測位置へ伸ばします。状態と計測値のCanvas診断属性は開発時の実機テストで利用し、利用者向けの画面には増殖するテキストを置きません。
+品質は一方向の「軽量化」ではなく、120フレームのp95と最大フレーム時間を基準に `cinema → balanced → efficient → still` を往復します。p95が目標の1.25倍を超えた場合、または約20.0ms（16.7msの1.2倍）超のスパイクを直近5回中2回検出した場合にピクセル比と星屑の描画数を下げます。最大フレームは同じ窓のp50 cadenceを使って正規化し、2.5 cadence以上を反復スパイク、3 cadence以上を即時の深刻な停止として扱います。これにより60Hzの1〜2ティックや低リフレッシュの揺らぎを過剰反応せず、3フレーム級の停止は保護します。GPUはThree.jsのtimestamp-queryが利用できる場合、約500ms間隔で直近値、サンプル数、p50/p95/maxを別々にCanvas診断属性へ残します。新しいピアは discovery → ping → link → settle → reframe の段階を持ち、線分は `link` 以降だけを実測位置へ伸ばします。状態と計測値のCanvas診断属性は開発時の実機テストで利用し、利用者向けの画面には増殖するテキストを置きません。
 
 ## 無料運用と収益化の境界
 

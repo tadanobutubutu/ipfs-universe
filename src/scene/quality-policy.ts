@@ -81,19 +81,21 @@ export class QualityPolicy {
       sample.frameP50Ms > 0
         ? Math.min(33.34, Math.max(8.33, sample.frameP50Ms))
         : undefined;
-    // A 30 Hz device naturally reports ~33.3 ms frames. Use a little more than
-    // two cadence intervals as the severe boundary so a scheduler quantizing
-    // one frame to exactly two ticks does not trigger a false downgrade in
-    // headless or low-refresh environments. High-refresh devices still retain
-    // the fixed 26.72 ms floor for genuinely long stalls.
-    const cadenceGraceMultiplier = 2.2;
+    // A 30 Hz device naturally reports ~33.3 ms frames. Treat 2.5 cadence
+    // intervals as a repeatable spike and reserve the immediate severe path
+    // for three full intervals. This makes the policy explicit: one or two
+    // quantized frames are tolerated, while a sustained three-frame stall can
+    // still protect the tab. High-refresh devices retain the fixed floors for
+    // genuinely long stalls.
+    const cadenceSpikeMultiplier = 2.5;
+    const cadenceSevereMultiplier = 3;
     const spikeThreshold = Math.max(
       this.#targetMs * SPIKE_THRESHOLD,
-      cadence === undefined ? 0 : cadence * cadenceGraceMultiplier,
+      cadence === undefined ? 0 : cadence * cadenceSpikeMultiplier,
     );
     const severeThreshold = Math.max(
       this.#targetMs * SEVERE_SPIKE_THRESHOLD,
-      cadence === undefined ? 0 : cadence * cadenceGraceMultiplier,
+      cadence === undefined ? 0 : cadence * cadenceSevereMultiplier,
     );
     const frameMax = sample.frameMaxMs;
     const spike =

@@ -85,6 +85,25 @@ describe('symmetric render quality policy', () => {
     expect(decision.tier).toBe('cinema');
   });
 
+  it('keeps the severe path at three cadence intervals', () => {
+    const policy = new QualityPolicy();
+
+    const repeatedTick = policy.observe({
+      frameP50Ms: 16.67,
+      frameP95Ms: 16.67,
+      frameMaxMs: 42,
+    });
+    expect(repeatedTick.changed).toBe(false);
+
+    const severe = policy.observe({
+      frameP50Ms: 16.67,
+      frameP95Ms: 16.67,
+      frameMaxMs: 50.1,
+    });
+    expect(severe.changed).toBe(true);
+    expect(severe.tier).toBe('balanced');
+  });
+
   it('catches non-adjacent compositor spikes in the rolling sample window', () => {
     const policy = new QualityPolicy();
 

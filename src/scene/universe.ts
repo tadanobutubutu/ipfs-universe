@@ -261,7 +261,10 @@ class ThreeUniverseScene implements UniverseScene {
     // The core is the visual anchor even when a Kubo import fills the outer
     // field. Keep it large enough to read as the observatory, without letting
     // it collide with the first browser ring on a phone.
-    this.#coreScale = mobileQuality ? 2.1 : 2.3;
+    // Keep the host star at a stable visual weight on narrow screens. The
+    // 2.15 scale clears the 10% centre-projection target without forcing the
+    // camera to retreat or pulling distant peers into the frustum.
+    this.#coreScale = mobileQuality ? 2.15 : 2.3;
     this.#pulseBaseScale = mobileQuality ? 1.1 : this.#coreScale;
     this.#pulseExpansion = mobileQuality ? 1.2 : 4.8;
     this.#renderer.setClearColor(0x050508, 0);
