@@ -151,7 +151,14 @@ async function startScene(): Promise<void> {
         __peerstellationSetPeers?: (peers: readonly PeerRecord[]) => void;
       };
       devWindow.__peerstellationFreezePeers = false;
-      devWindow.__peerstellationSetPeers = (peers) => universe?.setPeers(peers);
+      devWindow.__peerstellationSetPeers = (peers) => {
+        // Feeding a fixture also freezes the app-level reducer updates. This
+        // prevents the asynchronous analytics/observer startup from racing
+        // the renderer and replacing the deterministic fixture with the
+        // still-empty live state midway through a visual test.
+        devWindow.__peerstellationFreezePeers = true;
+        universe?.setPeers(peers);
+      };
     }
   } catch {
     if (import.meta.env.DEV) {
@@ -219,6 +226,18 @@ async function startNetworkObserverWhenIdle(): Promise<void> {
     globalThis.setTimeout(resolve, delay);
   });
   if (appDisposed || networkGeneration !== 0) return;
+  // Rendering benchmarks use the development fixture switch to isolate the
+  // scene from Helia's intentionally deferred node bootstrap. Without this
+  // guard, the 12-second dynamic import would contaminate CPU frame metrics
+  // with a one-time module-evaluation long task. Production builds never
+  // expose this switch and always start the real browser node.
+  if (
+    import.meta.env.DEV &&
+    (window as Window & { __peerstellationFreezePeers?: boolean })
+      .__peerstellationFreezePeers === true
+  ) {
+    return;
+  }
   await new Promise<void>((resolve) => {
     const start = (): void => {
       void startNetworkObserver().finally(resolve);
