@@ -1,8 +1,6 @@
-name: Verify and deploy Peerstellation
+name: Verify and optionally deploy Peerstellation
 
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -53,7 +51,7 @@ jobs:
 
   deploy:
     name: Publish primary and immutable releases
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch'
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 15

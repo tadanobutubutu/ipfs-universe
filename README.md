@@ -62,6 +62,8 @@ npm run dev
 | `npm run deploy:cloudflare` | Wrangler で静的配信を更新 |
 | `npm run deploy:pinata` | `PINATA_JWT` がある時だけ CID をピン |
 
+GitHub Actions は pull request の検証だけを自動実行します。本番のCloudflare、Pinata、DNSLink更新は `workflow_dispatch` を明示的に実行した場合だけです。`main` へのpushだけで本番配信は始まりません。
+
 ### 評価ツール
 
 品質ゲートはブラウザ実機と静的検査を分けています。`test:a11y` は HTML の構文と、実際の Chromium での Pa11y axe／HTML CodeSniffer を連続実行します。Chrome DevTools MCP は Lighthouse（性能、アクセシビリティ、ベストプラクティス、SEO、Agentic Browsing）と Performance trace を確認するために使います。Agentic Browsing の WebMCP 検査対象が無い場合は Lighthouse が `n/a` と記録しますが、`llms.txt` の検査は必ず実行されます。
