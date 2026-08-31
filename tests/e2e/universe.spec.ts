@@ -569,6 +569,33 @@ test('keeps the live scene inside the fixed draw-call budget', async ({
   expect(laterObjects).toBe(initialObjects);
 });
 
+test('exercises adaptive quality recovery in a real browser runtime', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
+  const result = await page.evaluate(async () => {
+    const { QualityPolicy } = await import('/src/scene/quality-policy.ts');
+    const policy = new QualityPolicy();
+    policy.observe({ frameP95Ms: 28 });
+    const downgrade = policy.observe({ frameP95Ms: 28 });
+    policy.observe({ frameP95Ms: 8 });
+    policy.observe({ frameP95Ms: 8 });
+    const recovery = policy.observe({ frameP95Ms: 8 });
+    return {
+      downgrade: downgrade.tier,
+      recovery: recovery.tier,
+      reason: recovery.reason,
+    };
+  });
+
+  expect(result).toEqual({
+    downgrade: 'balanced',
+    recovery: 'cinema',
+    reason: 'recovered',
+  });
+});
+
 test('renders a 1,024-peer Kubo import with bounded draw calls', async ({
   page,
 }) => {
