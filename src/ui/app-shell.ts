@@ -1,4 +1,5 @@
 import type { PeerRecord, PeerState, PeerStatus } from '../network/peer-types';
+import type { SettingsPatch, SettingsState } from '../settings/settings-types';
 import type { PeerAnalytics } from '../wasm/load-wasm';
 import { renderPeerList } from './peer-list';
 
@@ -40,6 +41,18 @@ export class AppShell {
   readonly #historyClear = requiredElement<HTMLButtonElement>('history-clear');
   readonly #kuboProbe = requiredElement<HTMLButtonElement>('kubo-probe');
   readonly #kuboStatus = requiredElement<HTMLElement>('kubo-status');
+  readonly #settingsButton =
+    requiredElement<HTMLButtonElement>('settings-button');
+  readonly #settingsDialog =
+    requiredElement<HTMLDialogElement>('settings-dialog');
+  readonly #settingsDialogClose = requiredElement<HTMLButtonElement>(
+    'settings-dialog-close',
+  );
+  readonly #settingsForm = requiredElement<HTMLFormElement>('settings-form');
+  readonly #settingsReset =
+    requiredElement<HTMLButtonElement>('settings-reset');
+  readonly #settingsSummary = requiredElement<HTMLElement>('settings-summary');
+  readonly #skyboxCredit = requiredElement<HTMLElement>('skybox-credit');
   readonly #liveRegion = requiredElement<HTMLElement>('aggregate-live');
   readonly #nodeTooltip = requiredElement<HTMLElement>('node-tooltip');
   readonly #nodeTooltipPeer = requiredElement<HTMLElement>('node-tip-peer');
@@ -73,6 +86,9 @@ export class AppShell {
   #retryListener?: () => void;
   #clearHistoryListener?: () => void;
   #kuboProbeListener?: () => void;
+  #settingsChangeListener?: (patch: SettingsPatch) => void;
+  #settingsResetListener?: () => void;
+  #settingsDialogPreviousFocus?: HTMLElement;
   #announcementTimer?: number;
   #pendingAnnouncement = '';
   #lastAnnouncement = '';
@@ -110,6 +126,44 @@ export class AppShell {
     this.#kuboProbe.addEventListener('click', () =>
       this.#kuboProbeListener?.(),
     );
+    this.#settingsButton.addEventListener('click', () => {
+      this.#settingsDialogPreviousFocus = document.activeElement as HTMLElement;
+      this.#settingsDialog.showModal();
+      this.#settingsDialog.querySelector<HTMLElement>('select, input')?.focus();
+    });
+    this.#settingsDialogClose.addEventListener('click', () =>
+      this.#settingsDialog.close(),
+    );
+    this.#settingsDialog.addEventListener('close', () => {
+      this.#settingsDialogPreviousFocus?.focus();
+      this.#settingsDialogPreviousFocus = undefined;
+    });
+    this.#settingsForm.addEventListener('change', (event) => {
+      const target = event.target;
+      if (
+        !(
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLSelectElement
+        )
+      )
+        return;
+      const key = target.dataset.setting as keyof SettingsPatch | undefined;
+      if (key === undefined) return;
+      const value =
+        target instanceof HTMLInputElement && target.type === 'checkbox'
+          ? target.checked
+          : target instanceof HTMLInputElement && target.type === 'range'
+            ? Number(target.value)
+            : target.value;
+      this.#settingsChangeListener?.({ [key]: value } as SettingsPatch);
+    });
+    this.#settingsReset.addEventListener('click', () =>
+      this.#settingsResetListener?.(),
+    );
+    this.#settingsForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      this.#settingsDialog.close();
+    });
   }
 
   get motionPaused(): boolean {
@@ -132,6 +186,40 @@ export class AppShell {
 
   onKuboProbe(listener: () => void): void {
     this.#kuboProbeListener = listener;
+  }
+
+  onSettingsChange(listener: (patch: SettingsPatch) => void): void {
+    this.#settingsChangeListener = listener;
+  }
+
+  onSettingsReset(listener: () => void): void {
+    this.#settingsResetListener = listener;
+  }
+
+  setSettings(settings: SettingsState): void {
+    const controls = this.#settingsForm.querySelectorAll<
+      HTMLInputElement | HTMLSelectElement
+    >('[data-setting]');
+    controls.forEach((control) => {
+      const key = control.dataset.setting as keyof SettingsState | undefined;
+      if (key === undefined || key === 'version') return;
+      const value = settings[key];
+      if (control instanceof HTMLInputElement && control.type === 'checkbox') {
+        control.checked = value === true;
+      } else {
+        control.value = String(value);
+      }
+      const output = document.getElementById(`${control.id}-value`);
+      if (output !== null) output.textContent = formatSettingValue(key, value);
+    });
+    this.#settingsSummary.textContent =
+      settings.qualityMode === 'auto'
+        ? 'Auto quality protects the frame rate and recovers when the scene is cool.'
+        : `${settings.preset} preset is locked; manual quality will not auto-downgrade.`;
+    this.#skyboxCredit.textContent =
+      settings.skyboxMode === 'off'
+        ? 'Skybox disabled. The procedural CSS sky remains active and no panorama is downloaded.'
+        : 'Night Sky HDRI 008 — Lennart Demes / ambientCG · CC0 1.0 Universal. Full source, conversion details, and SHA-256 are recorded in docs/assets.md.';
   }
 
   setKuboStatus(message: string, busy = false): void {
@@ -300,10 +388,14 @@ export class AppShell {
       state.browserConnectedCount === 0 ? 'empty' : 'ok',
     );
     this.#observedMetric.textContent = formatInteger(state.totalCount);
-    this.#peerCount.textContent = formatInteger(state.browserConnectedCount);
+    // The header badge represents everything currently tracked in the
+    // explorer, including an explicitly imported Kubo view. The accessible
+    // name keeps the browser-live subset explicit so a Kubo observation is
+    // never mistaken for a connection owned by this browser.
+    this.#peerCount.textContent = formatInteger(state.totalCount);
     this.#peerButton.setAttribute(
       'aria-label',
-      `Open peer explorer, ${formatInteger(state.browserConnectedCount)} browser live peers`,
+      `Open peer explorer, ${formatInteger(state.totalCount)} peers tracked, ${formatInteger(state.browserConnectedCount)} browser live peers`,
     );
     this.#latencyMetric.textContent =
       analytics === undefined || analytics.latencySamples === 0
@@ -424,4 +516,27 @@ function formatInteger(value: number): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(
     value,
   );
+}
+
+function formatSettingValue(
+  key: keyof SettingsState,
+  value: SettingsState[keyof SettingsState],
+): string {
+  if (typeof value === 'boolean') return value ? 'On' : 'Off';
+  if (typeof value === 'string') return value;
+  if (key === 'fogDensity') return value.toFixed(4);
+  if (key === 'pixelRatio' || key === 'motionScale') {
+    return `${value.toFixed(2)}×`;
+  }
+  if (key === 'cameraSensitivity') return `${value.toFixed(2)}×`;
+  if (key === 'exposure') return value.toFixed(2);
+  if (
+    key === 'nebulaDensity' ||
+    key === 'dustDensity' ||
+    key === 'nodeLod' ||
+    key === 'edgeBrightness'
+  ) {
+    return value.toFixed(2);
+  }
+  return String(value);
 }

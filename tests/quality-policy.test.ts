@@ -72,6 +72,19 @@ describe('symmetric render quality policy', () => {
     expect(decision.tier).toBe('balanced');
   });
 
+  it('does not treat one exactly-two-tick frame as severe on a 60 Hz cadence', () => {
+    const policy = new QualityPolicy();
+
+    const decision = policy.observe({
+      frameP50Ms: 16.67,
+      frameP95Ms: 16.67,
+      frameMaxMs: 33.33,
+    });
+
+    expect(decision.changed).toBe(false);
+    expect(decision.tier).toBe('cinema');
+  });
+
   it('catches non-adjacent compositor spikes in the rolling sample window', () => {
     const policy = new QualityPolicy();
 

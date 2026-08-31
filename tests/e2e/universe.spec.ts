@@ -54,6 +54,9 @@ test('shows the 3D observatory immediately with semantic structure', async ({
     timeout: 5_000,
   });
   await expect(canvas).toHaveAttribute('data-renderer', /^(WebGPU|WebGL 2)$/u);
+  await expect(canvas).toHaveAttribute('data-skybox-status', 'ready', {
+    timeout: 8_000,
+  });
 
   const canvasSize = await canvas.evaluate((element) => {
     const canvasElement = element as HTMLCanvasElement;
@@ -116,6 +119,56 @@ test('supports keyboard navigation, motion pause, and peer details', async ({
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
+});
+
+test('supports WASD travel and a reversible right-click camera mode', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
+    timeout: 5_000,
+  });
+  const canvas = page.locator('#universe-canvas');
+  await page.getByRole('button', { name: /pause motion/i }).click();
+  await canvas.focus();
+  const before = Number(await canvas.getAttribute('data-camera-distance'));
+  await page.keyboard.down('w');
+  await page.waitForTimeout(60);
+  await page.keyboard.up('w');
+  const after = Number(await canvas.getAttribute('data-camera-distance'));
+  expect(after).toBeLessThan(before);
+
+  await canvas.click({ button: 'right', position: { x: 180, y: 180 } });
+  await expect(canvas).toHaveAttribute('data-pointer-mode', 'camera');
+  await page.keyboard.press('Escape');
+  await expect(canvas).toHaveAttribute('data-pointer-mode', 'hover');
+});
+
+test('opens accessible settings and applies a manual quality preset', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready', {
+    timeout: 5_000,
+  });
+  const settingsButton = page.getByRole('button', {
+    name: /open observatory settings/i,
+  });
+  await settingsButton.click();
+  const dialog = page.getByRole('dialog', { name: /tune the sky/i });
+  await expect(dialog).toBeVisible();
+  const preset = dialog.locator('#settings-preset');
+  const qualityMode = dialog.locator('#settings-quality-mode');
+  await expect(preset).toHaveValue('auto');
+  await preset.selectOption('highest');
+  await expect(qualityMode).toHaveValue('manual');
+  await expect(page.locator('#settings-summary')).toContainText('highest');
+  await page.locator('#settings-reset').click();
+  await expect(preset).toHaveValue('auto');
+  await expect(qualityMode).toHaveValue('auto');
+  await page.getByRole('button', { name: /apply and close/i }).click();
+  await expect(dialog).toBeHidden();
+  await expect(settingsButton).toBeFocused();
 });
 
 test('honors reduced motion before the first rendered frame', async ({
@@ -256,7 +309,7 @@ test('keeps network state and peer count names discoverable at a standard phone 
     'status',
   );
   await expect(page.locator('#peer-explorer-button')).toHaveAccessibleName(
-    /open peer explorer, 0 browser live peers/i,
+    /open peer explorer, 0 peers tracked, 0 browser live peers/i,
   );
 });
 
@@ -311,7 +364,7 @@ test('imports local Kubo peers without relabelling them as browser-live', async 
     timeout: 5_000,
   });
   await expect(page.locator('#metric-connected')).toHaveText('0');
-  await expect(page.locator('#header-peer-count')).toHaveText('0');
+  await expect(page.locator('#header-peer-count')).toHaveText('3');
   await expect(page.locator('#kubo-status')).toContainText('3 peers observed');
 
   await page.getByRole('button', { name: /peer explorer|peers/i }).click();
@@ -577,6 +630,7 @@ test('exercises adaptive quality recovery in a real browser runtime', async ({
   const result = await page.evaluate(() => {
     const observe = (
       window as Window & {
+        __peerstellationResetQuality?: () => void;
         __peerstellationObserveQuality?: (sample: {
           frameP95Ms: number;
           frameMaxMs?: number;
@@ -585,6 +639,9 @@ test('exercises adaptive quality recovery in a real browser runtime', async ({
     ).__peerstellationObserveQuality;
     if (observe === undefined)
       throw new Error('quality fixture is unavailable');
+    (
+      window as Window & { __peerstellationResetQuality?: () => void }
+    ).__peerstellationResetQuality?.();
     observe({ frameP95Ms: 28 });
     observe({ frameP95Ms: 28 });
     const downgraded =
@@ -612,7 +669,7 @@ test('exercises adaptive quality recovery in a real browser runtime', async ({
   });
 });
 
-test('renders a 1,024-peer Kubo import with bounded draw calls', async ({
+test('renders a 1,024-peer Kubo import without reframing away from the core', async ({
   page,
 }) => {
   await page.goto('/');
@@ -657,10 +714,32 @@ test('renders a 1,024-peer Kubo import with bounded draw calls', async ({
       radii: (canvas?.dataset.peerRadii ?? '').split(',').filter(Boolean)
         .length,
       renderer: canvas?.dataset.renderer,
+      fitRadius: Number(canvas?.dataset.cameraFitRadius ?? 0),
+      cameraDistance: Number(canvas?.dataset.cameraDistance ?? 0),
+      furthestPeerRadius: Math.max(
+        ...(canvas?.dataset.peerRadii ?? '')
+          .split(',')
+          .filter(Boolean)
+          .map(Number),
+      ),
     };
   });
   expect(result.radii).toBe(1_024);
   expect(result.renderer).toMatch(/^(WebGPU|WebGL 2)$/u);
+  expect(result.fitRadius).toBeGreaterThan(0);
+  expect(result.fitRadius).toBeLessThan(result.furthestPeerRadius);
+  expect(result.furthestPeerRadius).toBeGreaterThan(180);
+  await expect(page.locator('#universe-canvas')).toHaveAttribute(
+    'data-camera-distance',
+    /\d+/u,
+  );
+  expect(
+    Number(
+      await page
+        .locator('#universe-canvas')
+        .getAttribute('data-camera-distance'),
+    ),
+  ).toBeLessThanOrEqual(180);
   await expect(page.locator('#universe-canvas')).toHaveAttribute(
     'data-draw-calls',
     /\d+/u,
@@ -670,7 +749,63 @@ test('renders a 1,024-peer Kubo import with bounded draw calls', async ({
     Number(
       await page.locator('#universe-canvas').getAttribute('data-draw-calls'),
     ),
-  ).toBeLessThanOrEqual(12);
+  ).toBeLessThanOrEqual(16);
+});
+
+test('keeps a Kubo-only first view anchored on the nearest imported peers', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
+  const result = await page.evaluate(() => {
+    type FixturePeer = {
+      peerId: string;
+      status: 'connected';
+      source: 'kubo';
+      statusObservedAt: number;
+      firstSeenAt: number;
+      lastSeenAt: number;
+      direction: 'inbound' | 'outbound';
+      transport: string;
+    };
+    const setPeers = (
+      window as Window & {
+        __peerstellationSetPeers?: (peers: readonly FixturePeer[]) => void;
+      }
+    ).__peerstellationSetPeers;
+    if (setPeers === undefined)
+      throw new Error('development Kubo-only fixture is unavailable');
+    setPeers(
+      Array.from({ length: 48 }, (_, index) => ({
+        peerId: `12D3KooWKuboOnly${String(index).padStart(3, '0')}`,
+        status: 'connected' as const,
+        source: 'kubo' as const,
+        statusObservedAt: 1,
+        firstSeenAt: 1,
+        lastSeenAt: 1,
+        direction: 'outbound' as const,
+        transport: 'quic-v1',
+      })),
+    );
+    const canvas =
+      document.querySelector<HTMLCanvasElement>('#universe-canvas');
+    const radii = (canvas?.dataset.peerRadii ?? '')
+      .split(',')
+      .filter(Boolean)
+      .map(Number);
+    return {
+      kuboCount: Number(canvas?.dataset.kuboNodeCount ?? 0),
+      fitRadius: Number(canvas?.dataset.cameraFitRadius ?? 0),
+      cameraDistance: Number(canvas?.dataset.cameraDistance ?? 0),
+      nearestRadius: Math.min(...radii),
+      furthestRadius: Math.max(...radii),
+    };
+  });
+  expect(result.kuboCount).toBe(48);
+  expect(result.fitRadius).toBeGreaterThan(0);
+  expect(result.nearestRadius).toBeLessThan(150);
+  expect(result.fitRadius).toBeLessThan(result.furthestRadius);
+  expect(result.cameraDistance).toBeLessThanOrEqual(180);
 });
 
 test('keeps a browser-live edge visible on a narrow viewport beside Kubo peers', async ({

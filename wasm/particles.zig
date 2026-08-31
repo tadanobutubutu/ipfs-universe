@@ -6,7 +6,10 @@ const edge_width: usize = vector_width * 2;
 const max_edge_count: usize = max_node_count * 2;
 const edge_component_count: usize = max_edge_count * edge_width;
 const relay_edge_seen_count: usize = max_node_count * max_node_count;
-const boundary_radius: f32 = 76.0;
+// Keep the numeric world larger than the camera envelope. High-latency peers
+// are allowed to leave the viewport instead of being pulled into a ring that
+// falsely suggests a short path.
+const boundary_radius: f32 = 2_048.0;
 const repulsion_radius: f32 = 7.5;
 const connected_status: i32 = 1;
 const kubo_source: i32 = 1;
@@ -55,7 +58,7 @@ export fn seed_node(requested_index: i32, requested_seed: i32, requested_radius:
 
     const seed: u32 = @bitCast(requested_seed);
     const indexed_seed = seed +% (@as(u32, @intCast(index)) *% 0x9e3779b9);
-    const radius = if (std.math.isFinite(requested_radius)) std.math.clamp(requested_radius, 8.0, 76.0) else 40.0;
+    const radius = if (std.math.isFinite(requested_radius)) std.math.clamp(requested_radius, 8.0, 2048.0) else 40.0;
     // A uniform sphere keeps arrivals visually distributed in every direction.
     // The transport sector is metadata, not a fake topology signal.
     _ = requested_sector;

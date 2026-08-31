@@ -9,6 +9,8 @@ export type QualityTier = (typeof QUALITY_TIERS)[number];
 
 export interface QualitySample {
   readonly frameP95Ms: number;
+  /** Median cadence observed in the same window (used to normalize refresh rate). */
+  readonly frameP50Ms?: number;
   /** Largest observed frame in the sample window, used for jank spikes. */
   readonly frameMaxMs?: number;
 }
@@ -58,21 +60,50 @@ export class QualityPolicy {
     return QUALITY_TIERS[this.#tierIndex] ?? 'cinema';
   }
 
+  reset(): void {
+    this.#tierIndex = 0;
+    this.#overBudgetStreak = 0;
+    this.#recoveryStreak = 0;
+    this.#spikeHistory.fill(0);
+    this.#spikeHistoryCount = 0;
+    this.#spikeHistoryCursor = 0;
+  }
+
   observe(sample: QualitySample): QualityDecision {
     const p95 = sample.frameP95Ms;
     if (!Number.isFinite(p95) || p95 < 0) {
       return this.#decision(false, 'steady');
     }
 
+    const cadence =
+      sample.frameP50Ms !== undefined &&
+      Number.isFinite(sample.frameP50Ms) &&
+      sample.frameP50Ms > 0
+        ? Math.min(33.34, Math.max(8.33, sample.frameP50Ms))
+        : undefined;
+    // A 30 Hz device naturally reports ~33.3 ms frames. Use a little more than
+    // two cadence intervals as the severe boundary so a scheduler quantizing
+    // one frame to exactly two ticks does not trigger a false downgrade in
+    // headless or low-refresh environments. High-refresh devices still retain
+    // the fixed 26.72 ms floor for genuinely long stalls.
+    const cadenceGraceMultiplier = 2.2;
+    const spikeThreshold = Math.max(
+      this.#targetMs * SPIKE_THRESHOLD,
+      cadence === undefined ? 0 : cadence * cadenceGraceMultiplier,
+    );
+    const severeThreshold = Math.max(
+      this.#targetMs * SEVERE_SPIKE_THRESHOLD,
+      cadence === undefined ? 0 : cadence * cadenceGraceMultiplier,
+    );
     const frameMax = sample.frameMaxMs;
     const spike =
       frameMax !== undefined &&
       Number.isFinite(frameMax) &&
-      frameMax > this.#targetMs * SPIKE_THRESHOLD;
+      frameMax > spikeThreshold;
     const severeSpike =
       frameMax !== undefined &&
       Number.isFinite(frameMax) &&
-      frameMax > this.#targetMs * SEVERE_SPIKE_THRESHOLD;
+      frameMax > severeThreshold;
     this.#spikeHistory[this.#spikeHistoryCursor] = spike ? 1 : 0;
     this.#spikeHistoryCursor =
       (this.#spikeHistoryCursor + 1) % SPIKE_WINDOW_SIZE;

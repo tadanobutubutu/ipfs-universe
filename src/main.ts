@@ -20,6 +20,8 @@ import type {
   PeerState,
 } from './network/peer-types';
 import type { UniverseScene } from './scene/universe';
+import { SETTINGS_STORAGE_KEY } from './settings/settings-defaults';
+import { SettingsStore } from './settings/settings-store';
 import { AppShell } from './ui/app-shell';
 import {
   type AnalyticsWasm,
@@ -41,12 +43,22 @@ const MOBILE_NETWORK_BOOT_DELAY_MS = 12_000;
 
 if (import.meta.env.DEV) {
   (
-    window as Window & { __peerstellationSceneReady?: boolean }
+    window as Window & {
+      __peerstellationSceneReady?: boolean;
+      __peerstellationHooksReady?: boolean;
+    }
   ).__peerstellationSceneReady = false;
+  (
+    window as Window & {
+      __peerstellationSceneReady?: boolean;
+      __peerstellationHooksReady?: boolean;
+    }
+  ).__peerstellationHooksReady = false;
 }
 
 const canvas = requiredCanvas('universe-canvas');
 const shell = new AppShell();
+const settingsStore = new SettingsStore();
 let universe: UniverseScene | undefined;
 let analytics: AnalyticsWasm | undefined;
 let observer: HeliaObserver | undefined;
@@ -63,6 +75,23 @@ const pendingPersistence = new Map<
 >();
 
 shell.onMotionChange((paused) => universe?.setMotionPaused(paused));
+shell.onSettingsChange((patch) => {
+  if (patch.preset !== undefined) {
+    settingsStore.applyPreset(patch.preset);
+    return;
+  }
+  settingsStore.update(patch);
+});
+shell.onSettingsReset(() => settingsStore.reset());
+settingsStore.subscribe((settings) => {
+  shell.setSettings(settings);
+  universe?.applySettings(settings);
+});
+window.addEventListener('storage', (event) => {
+  if (event.key === SETTINGS_STORAGE_KEY) {
+    settingsStore.syncSerialized(event.newValue);
+  }
+});
 shell.onRetry(() => {
   void startNetworkObserver();
 });
@@ -136,7 +165,8 @@ window.addEventListener(
 async function startScene(): Promise<void> {
   try {
     const { createUniverseScene } = await import('./scene/universe');
-    universe = await createUniverseScene(canvas);
+    universe = await createUniverseScene(canvas, settingsStore.get());
+    universe.applySettings(settingsStore.get());
     universe.onNodeInteraction(({ peer, x, y, pinned }) => {
       shell.showNodeDetails(peer, x, y, pinned);
     });
@@ -148,24 +178,38 @@ async function startScene(): Promise<void> {
     if (import.meta.env.DEV) {
       const devWindow = window as Window & {
         __peerstellationFreezePeers?: boolean;
+        __peerstellationHooksReady?: boolean;
         __peerstellationSetPeers?: (peers: readonly PeerRecord[]) => void;
+        __peerstellationResetQuality?: () => void;
         __peerstellationObserveQuality?: (sample: {
           frameP95Ms: number;
           frameMaxMs?: number;
         }) => void;
       };
       devWindow.__peerstellationFreezePeers = false;
+      devWindow.__peerstellationResetQuality = () => {
+        universe?.resetQualityForTesting();
+      };
       devWindow.__peerstellationSetPeers = (peers) => {
         // Feeding a fixture also freezes the app-level reducer updates. This
         // prevents the asynchronous analytics/observer startup from racing
         // the renderer and replacing the deterministic fixture with the
         // still-empty live state midway through a visual test.
         devWindow.__peerstellationFreezePeers = true;
+        const fixtureState = stateFromDevelopmentPeers(peers);
+        shell.updatePeerState(fixtureState);
+        shell.setNetworkState(
+          'online',
+          fixtureState.browserConnectedCount > 0
+            ? `Observing ${fixtureState.browserConnectedCount} fixture connections`
+            : `Tracking ${fixtureState.totalCount} imported fixture peers`,
+        );
         universe?.setPeers(peers);
       };
       devWindow.__peerstellationObserveQuality = (sample) => {
         universe?.observeQuality(sample);
       };
+      devWindow.__peerstellationHooksReady = true;
     }
   } catch {
     if (import.meta.env.DEV) {
@@ -175,6 +219,36 @@ async function startScene(): Promise<void> {
     }
     shell.markSceneUnavailable();
   }
+}
+
+function stateFromDevelopmentPeers(peers: readonly PeerRecord[]): PeerState {
+  const map = new Map(peers.map((peer) => [peer.peerId, peer] as const));
+  let connectedCount = 0;
+  let browserConnectedCount = 0;
+  let kuboConnectedCount = 0;
+  let discoveredCount = 0;
+  let disconnectedCount = 0;
+  for (const peer of map.values()) {
+    if (peer.status === 'connected') {
+      connectedCount += 1;
+      if (peer.source === 'kubo') kuboConnectedCount += 1;
+      else browserConnectedCount += 1;
+    } else if (peer.status === 'discovered') {
+      discoveredCount += 1;
+    } else {
+      disconnectedCount += 1;
+    }
+  }
+  return {
+    peers: map,
+    totalCount: map.size,
+    connectedCount,
+    browserConnectedCount,
+    kuboConnectedCount,
+    discoveredCount,
+    disconnectedCount,
+    revision: 0,
+  };
 }
 
 async function startDeferredSystems(): Promise<void> {

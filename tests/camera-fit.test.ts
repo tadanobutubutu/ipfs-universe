@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  capAutoCameraDistance,
   capPortraitDistance,
   fitBoundsRadius,
   fitBoundsRadiusP90,
@@ -37,6 +38,8 @@ describe('perspective observatory framing', () => {
 
   it('caps wide-field framing so the observatory core stays prominent', () => {
     expect(fitPerspectiveDistance(10_000, Math.PI / 4, 1.6, 1.2)).toBe(180);
+    expect(capAutoCameraDistance(180, 1.6)).toBe(150);
+    expect(capAutoCameraDistance(180, 0.45)).toBe(145);
   });
 
   it('finds the furthest live peer radius without allocating vectors', () => {

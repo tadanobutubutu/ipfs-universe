@@ -8,6 +8,7 @@ import {
   CanvasTexture,
   Color,
   DynamicDrawUsage,
+  EquirectangularReflectionMapping,
   FogExp2,
   Group,
   IcosahedronGeometry,
@@ -32,12 +33,14 @@ import {
   SpriteMaterial,
   SRGBColorSpace,
   type Texture,
+  TextureLoader,
   TorusGeometry,
   Vector3,
   WebGPURenderer,
 } from 'three/webgpu';
 
 import type { PeerRecord } from '../network/peer-types';
+import type { SettingsState } from '../settings/settings-types';
 import type { PhysicsWasm } from '../wasm/load-wasm';
 import {
   type ArrivalState,
@@ -49,19 +52,31 @@ import {
 import {
   CAMERA_MAX_DISTANCE,
   CAMERA_MIN_DISTANCE,
-  capPortraitDistance,
+  capAutoCameraDistance,
   fitCompositionRadius,
   fitPerspectiveDistance,
 } from './camera-fit';
+import {
+  cameraIntentFromKeys,
+  isCameraCode,
+  pointerModeLabel,
+} from './camera-input';
 import { frameElapsedMs, simulationDeltaSeconds } from './frame-stats';
 import { gpuDurationStats, normalizeGpuDuration } from './gpu-timing';
 import {
   type QualityDecision,
   QualityPolicy,
   type QualitySample,
+  type QualityTier,
 } from './quality-policy';
+import { MAX_PEER_WORLD_RADIUS } from './spatial-scale';
 
 const SCENE_NODE_LIMIT = 1_024;
+// Rendering still keeps every admitted peer. The numeric solver updates a
+// bounded near-field budget each frame; outer observations keep their seeded
+// coordinates until they enter that budget, avoiding an O(n²) long task during
+// large Kubo imports without hiding or re-scaling any node.
+const PHYSICS_NODE_BUDGET = 256;
 const MAX_EXPECTED_DRAW_CALLS_PER_FRAME = 128;
 const CONNECTED_COLOR = new Color(0xc9ff70);
 const DISCOVERED_COLOR = new Color(0xc2b4ff);
@@ -73,6 +88,8 @@ export interface UniverseScene {
   readonly rendererName: string;
   attachPhysics(physics: PhysicsWasm): void;
   setPeers(peers: readonly PeerRecord[]): void;
+  applySettings(settings: SettingsState): void;
+  resetQualityForTesting(): void;
   observeQuality(sample: QualitySample): QualityDecision;
   onNodeInteraction(
     listener: (interaction: NodeInteraction) => void,
@@ -92,10 +109,11 @@ export interface NodeInteraction {
 
 export async function createUniverseScene(
   canvas: HTMLCanvasElement,
+  initialSettings?: SettingsState,
 ): Promise<UniverseScene> {
   const renderer = new WebGPURenderer({
     alpha: true,
-    antialias: !(window.innerWidth < 640),
+    antialias: initialSettings?.antialiasing ?? !(window.innerWidth < 640),
     canvas,
     depth: true,
     powerPreference: 'high-performance',
@@ -115,7 +133,8 @@ class ThreeUniverseScene implements UniverseScene {
   readonly #canvas: HTMLCanvasElement;
   readonly #renderer: Renderer;
   readonly #scene = new Scene();
-  readonly #camera = new PerspectiveCamera(48, 1, 0.1, 420);
+  readonly #textureLoader = new TextureLoader();
+  readonly #camera = new PerspectiveCamera(48, 1, 0.1, 4_096);
   readonly #lookTarget = new Vector3();
   readonly #core = new Group();
   readonly #coreScale: number;
@@ -158,6 +177,9 @@ class ThreeUniverseScene implements UniverseScene {
   #pointerId?: number;
   #pointerX = 0;
   #pointerY = 0;
+  readonly #pressedKeys = new Set<string>();
+  #orbitMode = false;
+  #orbitPointerReady = false;
   #yaw = -0.12;
   #pitch = 0.08;
   #distance = window.innerWidth < 640 ? 84 : 54;
@@ -192,6 +214,24 @@ class ThreeUniverseScene implements UniverseScene {
   #animatedFrames = 0;
   #renderedFrames = 0;
   #pixelRatio: number;
+  #qualityTier: QualityTier = 'cinema';
+  #manualQualityTier: QualityTier = 'cinema';
+  #qualityMode: SettingsState['qualityMode'] = 'auto';
+  #motionScale = 1;
+  #cameraSensitivity = 1;
+  #edgeBrightness = 1;
+  #nebulaDensity = 1;
+  #dustDensity = 1;
+  #nodeLod = 1;
+  #autoOrbit = true;
+  #pulseEnabled = true;
+  #showKubo = true;
+  #showDiscovered = true;
+  #showLatencyRings = true;
+  #skyboxRequest = 0;
+  #skyboxTexture?: Texture;
+  #skyboxMode: SettingsState['skyboxMode'] = 'off';
+  #skyboxInitialized = false;
   #shaderWarmupStarted = false;
   #shaderWarmupDone = false;
   readonly #pickWorld = new Vector3();
@@ -221,7 +261,7 @@ class ThreeUniverseScene implements UniverseScene {
     // The core is the visual anchor even when a Kubo import fills the outer
     // field. Keep it large enough to read as the observatory, without letting
     // it collide with the first browser ring on a phone.
-    this.#coreScale = mobileQuality ? 1.9 : 2.0;
+    this.#coreScale = mobileQuality ? 2.1 : 2.3;
     this.#pulseBaseScale = mobileQuality ? 1.1 : this.#coreScale;
     this.#pulseExpansion = mobileQuality ? 1.2 : 4.8;
     this.#renderer.setClearColor(0x050508, 0);
@@ -395,12 +435,13 @@ class ThreeUniverseScene implements UniverseScene {
     this.#connectedPeerMesh.count = visible.filter(isBrowserLivePeer).length;
     this.#connectedPeerMesh.visible = this.#connectedPeerMesh.count > 0;
     this.#kuboPeerMesh.count = visible.filter(isKuboObservedPeer).length;
-    this.#kuboPeerMesh.visible = this.#kuboPeerMesh.count > 0;
-    this.#kuboOrbit.visible = this.#kuboPeerMesh.count > 0;
+    this.#kuboPeerMesh.visible = this.#showKubo && this.#kuboPeerMesh.count > 0;
+    this.#kuboOrbit.visible = this.#showKubo && this.#kuboPeerMesh.count > 0;
     this.#discoveredPeerMesh.count = visible.filter(
       (peer) => !isBrowserLivePeer(peer) && !isKuboObservedPeer(peer),
     ).length;
-    this.#discoveredPeerMesh.visible = this.#discoveredPeerMesh.count > 0;
+    this.#discoveredPeerMesh.visible =
+      this.#showDiscovered && this.#discoveredPeerMesh.count > 0;
     this.#canvas.dataset.browserNodeCount = String(
       this.#connectedPeerMesh.count,
     );
@@ -425,10 +466,144 @@ class ThreeUniverseScene implements UniverseScene {
     }
   }
 
+  applySettings(settings: SettingsState): void {
+    this.#qualityMode = settings.qualityMode;
+    this.#manualQualityTier = qualityTierForPreset(settings.preset);
+    this.#motionScale = settings.motionScale;
+    this.#cameraSensitivity = settings.cameraSensitivity;
+    this.#edgeBrightness = settings.edgeBrightness;
+    this.#nebulaDensity = settings.nebulaDensity;
+    this.#dustDensity = settings.dustDensity;
+    this.#nodeLod = settings.nodeLod;
+    this.#autoOrbit = settings.autoOrbit;
+    this.#pulseEnabled = settings.pulse;
+    this.#showKubo = settings.showKubo;
+    this.#showDiscovered = settings.showDiscovered;
+    this.#showLatencyRings = settings.showLatencyRings;
+    this.#scene.fog = new FogExp2(0x050508, settings.fogDensity);
+    this.#renderer.toneMappingExposure = settings.exposure;
+    this.#canvas.dataset.antialiasing = settings.antialiasing ? 'on' : 'off';
+    this.#canvas.dataset.skybox = settings.skyboxMode;
+    if (!this.#skyboxInitialized) {
+      this.#skyboxInitialized = true;
+      this.#queueInitialSkybox(settings.skyboxMode);
+    } else {
+      this.#setSkybox(settings.skyboxMode);
+    }
+    this.#canvas.dataset.pointerMode = pointerModeLabel(
+      settings.pointerMode === 'camera',
+    );
+    if (settings.pointerMode !== 'camera' && this.#orbitMode) {
+      this.#setOrbitMode(false);
+    }
+    if (this.#qualityMode === 'manual') {
+      this.#qualityTier = this.#manualQualityTier;
+      this.#pixelRatio = Math.min(
+        this.#basePixelRatio,
+        Math.max(0.55, settings.pixelRatio),
+      );
+    } else {
+      this.#qualityTier = this.#qualityPolicy.tier;
+      this.#pixelRatio = this.#basePixelRatio;
+    }
+    this.#canvas.dataset.qualityTier = this.#qualityTier;
+    this.#applyQualityTier(this.#qualityTier);
+    this.#nebula.visible = this.#nebulaDensity > 0;
+    this.#kuboPeerMesh.visible = this.#showKubo && this.#kuboPeerMesh.count > 0;
+    this.#kuboOrbit.visible = this.#showKubo && this.#kuboPeerMesh.count > 0;
+    this.#discoveredPeerMesh.visible =
+      this.#showDiscovered && this.#discoveredPeerMesh.count > 0;
+    if (this.#motionPaused) this.#renderStaticFrame();
+    else this.#resize();
+  }
+
+  resetQualityForTesting(): void {
+    this.#qualityPolicy.reset();
+    this.#qualityMode = 'auto';
+    this.#qualityTier = 'cinema';
+    this.#pixelRatio = this.#basePixelRatio;
+    this.#canvas.dataset.qualityTier = 'cinema';
+    this.#applyQualityTier('cinema');
+    this.#resize();
+  }
+
+  #setSkybox(mode: SettingsState['skyboxMode']): void {
+    if (mode === this.#skyboxMode && (mode === 'off' || this.#skyboxTexture)) {
+      return;
+    }
+    this.#skyboxMode = mode;
+    const request = ++this.#skyboxRequest;
+    if (mode === 'off') {
+      this.#scene.background = null;
+      this.#skyboxTexture?.dispose();
+      this.#skyboxTexture = undefined;
+      this.#canvas.dataset.skyboxStatus = 'off';
+      return;
+    }
+
+    const source =
+      mode === 'space-8k'
+        ? '/skybox/nightsky-8k.webp'
+        : '/skybox/nightsky-2k.webp';
+    this.#canvas.dataset.skyboxStatus = 'loading';
+    this.#textureLoader.load(
+      source,
+      (texture) => {
+        if (this.#disposed || request !== this.#skyboxRequest) {
+          texture.dispose();
+          return;
+        }
+        texture.mapping = EquirectangularReflectionMapping;
+        texture.colorSpace = SRGBColorSpace;
+        this.#skyboxTexture?.dispose();
+        this.#skyboxTexture = texture;
+        this.#scene.background = texture;
+        this.#canvas.dataset.skyboxStatus = 'ready';
+      },
+      undefined,
+      () => {
+        if (request !== this.#skyboxRequest) return;
+        this.#scene.background = null;
+        this.#canvas.dataset.skyboxStatus = 'fallback';
+      },
+    );
+  }
+
+  #queueInitialSkybox(mode: SettingsState['skyboxMode']): void {
+    if (mode === 'off') {
+      this.#setSkybox(mode);
+      return;
+    }
+    const request = ++this.#skyboxRequest;
+    this.#skyboxMode = mode;
+    this.#canvas.dataset.skyboxStatus = 'queued';
+    const load = (): void => {
+      if (this.#disposed || request !== this.#skyboxRequest) return;
+      this.#setSkybox(mode);
+    };
+    // Let the first interactive frame and its largest-contentful paint settle
+    // before decoding a panorama. The CSS starfield and WebGPU core are already
+    // visible, so this keeps mobile input responsive while still upgrading to
+    // the CC0 panorama shortly after the first interaction window.
+    // A fixed delay is deliberate: requestIdleCallback can fire during the
+    // Lighthouse/first-input window on a quiet device and move panorama
+    // decoding back into the very metric we are trying to protect.
+    globalThis.setTimeout(load, 5_500);
+  }
+
   observeQuality(sample: QualitySample): QualityDecision {
+    if (this.#qualityMode === 'manual') {
+      return {
+        changed: false,
+        tier: this.#qualityTier,
+        pixelRatioScale: 1,
+        reason: 'steady',
+      };
+    }
     const decision = this.#qualityPolicy.observe(sample);
     this.#canvas.dataset.qualityTier = decision.tier;
     if (decision.changed) {
+      this.#qualityTier = decision.tier;
       this.#pixelRatio = Math.min(
         this.#basePixelRatio,
         Math.max(0.55, this.#basePixelRatio * decision.pixelRatioScale),
@@ -490,6 +665,8 @@ class ThreeUniverseScene implements UniverseScene {
         disposeMaterial(object.material);
       }
     });
+    this.#skyboxTexture?.dispose();
+    this.#skyboxTexture = undefined;
     this.#edgeGeometry.dispose();
     const pendingGpuTimestamp = this.#gpuTimestampRequest;
     const disposeRenderer = (): void => {
@@ -660,25 +837,32 @@ class ThreeUniverseScene implements UniverseScene {
       return;
     }
     if (!this.#motionPaused) {
-      this.#advanceArrivals(delta * 1_000);
+      const motionDelta = delta * this.#motionScale;
+      this.#advanceArrivals(motionDelta * 1_000);
+      this.#applyKeyboardMotion(delta);
       const interactionActive =
         this.#hoveredIndex !== undefined || this.#selectedIndex !== undefined;
       if (!interactionActive) {
-        this.#targetYaw += delta * 0.035;
-        this.#physics?.step(delta, this.#peers.length, 1);
+        if (this.#autoOrbit) this.#targetYaw += motionDelta * 0.035;
+        const physicsCount = Math.min(
+          this.#peers.length,
+          physicsNodeBudget(this.#qualityTier, this.#mobileQuality),
+        );
+        this.#physics?.step(motionDelta, physicsCount, 1);
+        this.#canvas.dataset.physicsActiveCount = String(physicsCount);
       }
-      this.#core.rotation.y += delta * 0.09;
-      this.#core.rotation.x += delta * 0.025;
+      this.#core.rotation.y += motionDelta * 0.09;
+      this.#core.rotation.x += motionDelta * 0.025;
       if (this.#kuboOrbit.visible) {
-        this.#kuboOrbit.rotation.y += delta * 0.012;
-        this.#kuboOrbit.rotation.z -= delta * 0.006;
+        this.#kuboOrbit.rotation.y += motionDelta * 0.012;
+        this.#kuboOrbit.rotation.z -= motionDelta * 0.006;
       }
-      this.#dust.rotation.y -= delta * 0.004;
+      this.#dust.rotation.y -= motionDelta * 0.004;
       // Three depth layers drift at different rates. The parallax is what makes
       // the field read as volume rather than a flat backdrop.
-      this.#nebula.rotation.y += delta * 0.0016;
-      this.#nebula.rotation.z -= delta * 0.0008;
-      this.#coronaPhase += delta;
+      this.#nebula.rotation.y += motionDelta * 0.0016;
+      this.#nebula.rotation.z -= motionDelta * 0.0008;
+      this.#coronaPhase += motionDelta;
       const breathe = 1 + Math.sin(this.#coronaPhase * 0.55) * 0.045;
       this.#corona.scale.setScalar(breathe * this.#coronaDensityScale);
     }
@@ -713,6 +897,12 @@ class ThreeUniverseScene implements UniverseScene {
 
   #updatePulse(now: number): void {
     const material = this.#pulseRing.material;
+    if (!this.#pulseEnabled || !this.#showLatencyRings) {
+      this.#canvas.dataset.pulse = 'disabled';
+      this.#pulseRing.visible = false;
+      material.opacity = 0;
+      return;
+    }
     const remaining = this.#pulseUntil - now;
     if (this.#motionPaused) {
       // Reduced-motion users still get a non-animated discovery affordance.
@@ -790,10 +980,11 @@ class ThreeUniverseScene implements UniverseScene {
             : 1;
       const arrival = this.#arrivals.get(peer.peerId);
       const arrivalEmphasis = arrival === undefined ? 1 : arrivalScale(arrival);
+      const lodScale = 0.74 + this.#nodeLod * 0.26;
       this.#matrix.makeScale(
-        scale * emphasis * arrivalEmphasis,
-        scale * emphasis * arrivalEmphasis,
-        scale * emphasis * arrivalEmphasis,
+        scale * emphasis * arrivalEmphasis * lodScale,
+        scale * emphasis * arrivalEmphasis * lodScale,
+        scale * emphasis * arrivalEmphasis * lodScale,
       );
       this.#matrix.setPosition(x, y, z);
       const peerMesh = browserLive
@@ -822,7 +1013,9 @@ class ThreeUniverseScene implements UniverseScene {
         this.#edgePositions[edgeOffset + 5] = z * linkProgress;
         this.#edgeColor
           .copy(EDGE_COLOR)
-          .multiplyScalar(edgeBrightness(peer.latencyMs));
+          .multiplyScalar(
+            edgeBrightness(peer.latencyMs) * this.#edgeBrightness,
+          );
         // A light pulse travels core -> peer along each measured link. Only the
         // per-endpoint brightness moves; the endpoints themselves stay pinned to
         // the observed geometry, so the pulse can never imply an unmeasured
@@ -869,7 +1062,10 @@ class ThreeUniverseScene implements UniverseScene {
         this.#edgePositions[edgeOffset + 5] = positions[targetOffset + 2] ?? 0;
         this.#edgeColor
           .copy(EDGE_COLOR)
-          .multiplyScalar(Math.min(0.72, edgeBrightness(peer.latencyMs)));
+          .multiplyScalar(
+            Math.min(0.72, edgeBrightness(peer.latencyMs)) *
+              this.#edgeBrightness,
+          );
         for (let endpoint = 0; endpoint < 2; endpoint += 1) {
           const colorOffset = edgeOffset + endpoint * 3;
           this.#edgeColors[colorOffset] = this.#edgeColor.r;
@@ -1016,7 +1212,11 @@ class ThreeUniverseScene implements UniverseScene {
   #updateAutoFraming(): void {
     if (!this.#autoFrameEnabled || this.#peers.length === 0) return;
     const positions = this.#physicsPositions ?? this.#fallbackPositions;
-    const framingPeers = selectFramingPeers(this.#peers);
+    const framingPeers = selectFramingPeers(this.#peers).filter(
+      (peer) =>
+        (this.#showKubo || !isKuboObservedPeer(peer)) &&
+        (this.#showDiscovered || isBrowserLivePeer(peer)),
+    );
     const indices = new Map(
       this.#peers.map((peer, index) => [peer.peerId, index] as const),
     );
@@ -1039,7 +1239,7 @@ class ThreeUniverseScene implements UniverseScene {
       this.#camera.aspect,
       padding,
     );
-    this.#targetDistance = capPortraitDistance(
+    this.#targetDistance = capAutoCameraDistance(
       fittedDistance,
       this.#camera.aspect,
     );
@@ -1209,6 +1409,7 @@ class ThreeUniverseScene implements UniverseScene {
     this.#canvas.dataset.frameP95 = frameStats.p95.toFixed(2);
     this.#canvas.dataset.frameMax = frameStats.max.toFixed(2);
     this.observeQuality({
+      frameP50Ms: frameStats.p50,
       frameP95Ms: frameStats.p95,
       frameMaxMs: frameStats.max,
     });
@@ -1254,10 +1455,34 @@ class ThreeUniverseScene implements UniverseScene {
     } as const;
     this.#dust.geometry.setDrawRange(
       0,
-      Math.min(position.count, countByTier[tier]),
+      Math.min(
+        position.count,
+        Math.round(countByTier[tier] * this.#dustDensity),
+      ),
     );
     this.#canvas.dataset.dustPoints = String(
-      Math.min(position.count, countByTier[tier]),
+      Math.min(
+        position.count,
+        Math.round(countByTier[tier] * this.#dustDensity),
+      ),
+    );
+    this.#nebula.traverse((object) => {
+      if (object instanceof Points) {
+        const nebulaPosition = object.geometry.getAttribute('position');
+        object.geometry.setDrawRange(
+          0,
+          Math.round(nebulaPosition.count * this.#nebulaDensity),
+        );
+        object.material.opacity =
+          (this.#mobileQuality ? 0.28 : 0.62) * this.#nebulaDensity;
+      }
+      if (object instanceof Sprite) {
+        object.material.opacity =
+          (this.#mobileQuality ? 0.08 : 0.12) * this.#nebulaDensity;
+      }
+    });
+    this.#canvas.dataset.nebulaPoints = String(
+      Math.round((this.#mobileQuality ? 12 : 140) * this.#nebulaDensity),
     );
   }
 
@@ -1266,10 +1491,14 @@ class ThreeUniverseScene implements UniverseScene {
     this.#canvas.addEventListener('pointermove', this.#onPointerMove);
     this.#canvas.addEventListener('pointerup', this.#onPointerUp);
     this.#canvas.addEventListener('pointercancel', this.#onPointerUp);
+    this.#canvas.addEventListener('contextmenu', this.#onContextMenu);
     this.#canvas.addEventListener('wheel', this.#onWheel, { passive: false });
     this.#canvas.addEventListener('keydown', this.#onKeyDown);
+    this.#canvas.addEventListener('keyup', this.#onKeyUp);
     document.addEventListener('keydown', this.#onDocumentKeyDown);
+    window.addEventListener('blur', this.#onWindowBlur);
     document.addEventListener('visibilitychange', this.#onVisibilityChange);
+    this.#canvas.dataset.pointerMode = pointerModeLabel(false);
   }
 
   #unbindControls(): void {
@@ -1277,13 +1506,23 @@ class ThreeUniverseScene implements UniverseScene {
     this.#canvas.removeEventListener('pointermove', this.#onPointerMove);
     this.#canvas.removeEventListener('pointerup', this.#onPointerUp);
     this.#canvas.removeEventListener('pointercancel', this.#onPointerUp);
+    this.#canvas.removeEventListener('contextmenu', this.#onContextMenu);
     this.#canvas.removeEventListener('wheel', this.#onWheel);
     this.#canvas.removeEventListener('keydown', this.#onKeyDown);
+    this.#canvas.removeEventListener('keyup', this.#onKeyUp);
     document.removeEventListener('keydown', this.#onDocumentKeyDown);
+    window.removeEventListener('blur', this.#onWindowBlur);
     document.removeEventListener('visibilitychange', this.#onVisibilityChange);
+    this.#pressedKeys.clear();
   }
 
   readonly #onPointerDown = (event: PointerEvent): void => {
+    if (event.button === 2) {
+      this.#setOrbitMode(!this.#orbitMode);
+      event.preventDefault();
+      return;
+    }
+    if (event.button !== 0) return;
     this.#pointerId = event.pointerId;
     this.#pointerX = event.clientX;
     this.#pointerY = event.clientY;
@@ -1294,6 +1533,20 @@ class ThreeUniverseScene implements UniverseScene {
   };
 
   readonly #onPointerMove = (event: PointerEvent): void => {
+    if (
+      this.#pointerId === undefined &&
+      this.#orbitMode &&
+      event.pointerType === 'mouse'
+    ) {
+      if (!this.#orbitPointerReady) {
+        this.#pointerX = event.clientX;
+        this.#pointerY = event.clientY;
+        this.#orbitPointerReady = true;
+        return;
+      }
+      this.#rotateFromPointer(event);
+      return;
+    }
     if (this.#pointerId === undefined || event.pointerId !== this.#pointerId) {
       const hit = this.#peerAt(event.clientX, event.clientY);
       if (hit !== this.#hoveredIndex) {
@@ -1306,16 +1559,7 @@ class ThreeUniverseScene implements UniverseScene {
       }
       return;
     }
-    const deltaX = event.clientX - this.#pointerX;
-    const deltaY = event.clientY - this.#pointerY;
-    this.#pointerX = event.clientX;
-    this.#pointerY = event.clientY;
-    this.#targetYaw -= deltaX * 0.006;
-    this.#targetPitch = MathUtils.clamp(
-      this.#targetPitch + deltaY * 0.004,
-      -0.75,
-      0.75,
-    );
+    this.#rotateFromPointer(event);
     if (this.#motionPaused) {
       this.#renderStaticFrame();
     }
@@ -1324,6 +1568,7 @@ class ThreeUniverseScene implements UniverseScene {
   readonly #onPointerUp = (event: PointerEvent): void => {
     if (event.pointerId === this.#pointerId) {
       this.#pointerId = undefined;
+      this.#orbitPointerReady = false;
       if (this.#canvas.hasPointerCapture(event.pointerId)) {
         this.#canvas.releasePointerCapture(event.pointerId);
       }
@@ -1351,6 +1596,73 @@ class ThreeUniverseScene implements UniverseScene {
     }
   };
 
+  readonly #onContextMenu = (event: MouseEvent): void => {
+    event.preventDefault();
+  };
+
+  #rotateFromPointer(event: PointerEvent): void {
+    const deltaX = event.clientX - this.#pointerX;
+    const deltaY = event.clientY - this.#pointerY;
+    this.#pointerX = event.clientX;
+    this.#pointerY = event.clientY;
+    if (deltaX === 0 && deltaY === 0) return;
+    this.#autoFrameEnabled = false;
+    this.#targetYaw -= deltaX * 0.006 * this.#cameraSensitivity;
+    this.#targetPitch = MathUtils.clamp(
+      this.#targetPitch + deltaY * 0.004 * this.#cameraSensitivity,
+      -0.75,
+      0.75,
+    );
+    if (this.#motionPaused) {
+      this.#renderStaticFrame();
+    }
+  }
+
+  #setOrbitMode(orbit: boolean): void {
+    this.#orbitMode = orbit;
+    this.#orbitPointerReady = false;
+    this.#canvas.dataset.pointerMode = pointerModeLabel(orbit);
+    this.#canvas.setAttribute(
+      'aria-label',
+      orbit
+        ? '3D camera control active. Move the pointer to orbit. Press Escape or right click to return to peer hover.'
+        : 'Live 3D IPFS peer universe. Move the pointer over a peer for details.',
+    );
+    if (orbit) {
+      this.#hoveredIndex = undefined;
+      if (this.#selectedIndex === undefined)
+        this.#emitInteraction('clear', undefined, false);
+    }
+  }
+
+  #applyKeyboardMotion(deltaSeconds: number): void {
+    const intent = cameraIntentFromKeys(this.#pressedKeys);
+    if (
+      intent.forward === 0 &&
+      intent.strafe === 0 &&
+      intent.yaw === 0 &&
+      intent.pitch === 0
+    ) {
+      return;
+    }
+    this.#autoFrameEnabled = false;
+    const scale = Math.min(0.05, Math.max(0, deltaSeconds));
+    this.#targetDistance = MathUtils.clamp(
+      this.#targetDistance - intent.forward * scale * 24,
+      CAMERA_MIN_DISTANCE,
+      CAMERA_MAX_DISTANCE,
+    );
+    this.#targetYaw +=
+      (intent.strafe * 1.8 + intent.yaw * 2.2) *
+      scale *
+      this.#cameraSensitivity;
+    this.#targetPitch = MathUtils.clamp(
+      this.#targetPitch + intent.pitch * scale * 1.8 * this.#cameraSensitivity,
+      -0.75,
+      0.75,
+    );
+  }
+
   readonly #onWheel = (event: WheelEvent): void => {
     event.preventDefault();
     this.#autoFrameEnabled = false;
@@ -1365,20 +1677,16 @@ class ThreeUniverseScene implements UniverseScene {
   };
 
   readonly #onKeyDown = (event: KeyboardEvent): void => {
-    const rotationStep = event.shiftKey ? 0.22 : 0.1;
+    if (isCameraCode(event.code)) {
+      this.#pressedKeys.add(event.code);
+      event.preventDefault();
+      if (this.#motionPaused) {
+        this.#applyKeyboardMotion(1 / 60);
+        this.#renderStaticFrame();
+      }
+      return;
+    }
     switch (event.key) {
-      case 'ArrowLeft':
-        this.#targetYaw += rotationStep;
-        break;
-      case 'ArrowRight':
-        this.#targetYaw -= rotationStep;
-        break;
-      case 'ArrowUp':
-        this.#targetPitch = Math.max(-0.75, this.#targetPitch - rotationStep);
-        break;
-      case 'ArrowDown':
-        this.#targetPitch = Math.min(0.75, this.#targetPitch + rotationStep);
-        break;
       case '+':
       case '=':
       case 'PageUp':
@@ -1418,7 +1726,8 @@ class ThreeUniverseScene implements UniverseScene {
         event.preventDefault();
         return;
       case 'Escape':
-        this.#clearInteraction();
+        if (this.#orbitMode) this.#setOrbitMode(false);
+        else this.#clearInteraction();
         event.preventDefault();
         return;
       default:
@@ -1428,6 +1737,16 @@ class ThreeUniverseScene implements UniverseScene {
     if (this.#motionPaused) {
       this.#renderStaticFrame();
     }
+  };
+
+  readonly #onKeyUp = (event: KeyboardEvent): void => {
+    this.#pressedKeys.delete(event.code);
+  };
+
+  readonly #onWindowBlur = (): void => {
+    this.#pressedKeys.clear();
+    this.#pointerId = undefined;
+    this.#orbitPointerReady = false;
   };
 
   #selectRelative(delta: -1 | 1): void {
@@ -1462,7 +1781,8 @@ class ThreeUniverseScene implements UniverseScene {
 
   readonly #onDocumentKeyDown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && !event.defaultPrevented) {
-      this.#clearInteraction();
+      if (this.#orbitMode) this.#setOrbitMode(false);
+      else this.#clearInteraction();
     }
   };
 
@@ -1737,23 +2057,28 @@ function fallbackPositions(
 
 export function radialDistance(peer: PeerRecord): number {
   const seed = unitFromInteger(hashPeerId(peer.peerId) ^ 0xa53c9e17);
-  if (peer.source === 'kubo') {
-    return 52 + seed * 20;
+  if (peer.latencyMs !== undefined) {
+    const latency = MathUtils.clamp(peer.latencyMs, 10, 10_000);
+    const normalized =
+      (Math.log(latency) - Math.log(10)) / (Math.log(10_000) - Math.log(10));
+    // Ping is the dominant spatial signal. The source offset keeps a Kubo
+    // daemon observation in its outer field without replacing its measured
+    // latency with a decorative constant.
+    const sourceOffset = peer.source === 'kubo' ? 48 : 0;
+    const base = 12 + normalized * 420 + sourceOffset;
+    return Math.min(MAX_PEER_WORLD_RADIUS, base * (0.92 + seed * 0.16));
   }
-  if (peer.status === 'discovered') {
-    return 30 + seed * 10;
-  }
-  if (peer.latencyMs === undefined) {
-    return 18 + seed * 14;
-  }
-  const latency = MathUtils.clamp(peer.latencyMs, 10, 1_000);
-  const normalized =
-    (Math.log(latency) - Math.log(10)) / (Math.log(1_000) - Math.log(10));
-  // Keep the measured signal dominant over the stable per-peer jitter. The
-  // wider 8–50 world-unit span makes a 10ms peer visibly closer than an 800ms
-  // peer while preserving a small, deterministic spread at each latency.
-  const base = 8 + MathUtils.clamp(normalized, 0, 1) * 42;
-  return base * (0.9 + seed * 0.2);
+  // An unmeasured peer is not assigned a fake ping. It stays visibly outside
+  // the measured browser field, with Kubo and discovery records separated by
+  // their source/state bands.
+  const base =
+    // Kubo records are still separated by source and the orbit ring, but the
+    // nearest unmeasured observations must enter the first frame when the
+    // browser has no live peers yet. The long tail remains a deep field.
+    peer.source === 'kubo' ? 96 : peer.status === 'discovered' ? 120 : 84;
+  const spread =
+    peer.source === 'kubo' ? 240 : peer.status === 'discovered' ? 140 : 120;
+  return Math.min(MAX_PEER_WORLD_RADIUS, base + seed * spread);
 }
 
 /** Give the observatory core a small density response without changing its
@@ -1768,10 +2093,9 @@ export function coreScaleForPeerCount(
 }
 
 function sceneRadialDistance(peer: PeerRecord, mobileQuality: boolean): number {
-  if (mobileQuality && peer.source === 'kubo') {
-    const seed = unitFromInteger(hashPeerId(peer.peerId) ^ 0xa53c9e17);
-    return 30 + seed * 12;
-  }
+  // Mobile changes geometry density and pixel cost, never the semantic spatial
+  // scale. A high-latency Kubo peer must remain far away on every viewport.
+  void mobileQuality;
   return radialDistance(peer);
 }
 
@@ -1847,12 +2171,29 @@ export function prioritizeScenePeers(
 export function selectFramingPeers(
   peers: readonly PeerRecord[],
 ): readonly PeerRecord[] {
-  // Frame the complete observed field. `fitCompositionRadius` deliberately
-  // uses a robust percentile plus a bounded furthest-point contribution, so a
-  // large Kubo import remains visible without turning the browser core into a
-  // single pixel. Excluding Kubo here made a successful import disappear
-  // beyond the perspective frustum.
-  return peers.filter(({ status }) => status !== 'disconnected');
+  // The world field is intentionally unbounded from the composition's point
+  // of view: a high-latency or unmeasured Kubo peer may live far beyond the
+  // viewport and remain reachable through orbit/selection. Auto-framing is a
+  // different concern. Only browser-live peers and records with a measured
+  // latency are trusted to pull the camera; an unmeasured bulk import must not
+  // make the host star collapse into a speck. This preserves evidence in the
+  // scene while keeping the first view anchored on live measurements.
+  const eligible = peers.filter(
+    (peer) =>
+      peer.status !== 'disconnected' &&
+      (isBrowserLivePeer(peer) || peer.latencyMs !== undefined),
+  );
+  if (eligible.length > 0) return eligible;
+
+  // A Kubo-first visit can legitimately have no browser-live measurements.
+  // Frame only the nearest deterministic sample in that case so the imported
+  // field is discoverable without allowing a thousand-node tail to dictate
+  // the camera. The world positions of every peer remain untouched.
+  return peers
+    .filter(({ status }) => status !== 'disconnected')
+    .slice()
+    .sort((left, right) => radialDistance(left) - radialDistance(right))
+    .slice(0, 24);
 }
 
 function scenePriority(peer: PeerRecord): number {
@@ -1867,6 +2208,19 @@ function edgeBrightness(latencyMs: number | undefined): number {
   }
   const normalized = MathUtils.clamp(latencyMs, 0, 800) / 800;
   return MathUtils.lerp(1.15, 0.58, normalized);
+}
+
+function physicsNodeBudget(tier: QualityTier, mobileQuality: boolean): number {
+  if (mobileQuality) return tier === 'still' ? 32 : 96;
+  return Math.min(
+    PHYSICS_NODE_BUDGET,
+    {
+      cinema: 256,
+      balanced: 192,
+      efficient: 128,
+      still: 64,
+    }[tier],
+  );
 }
 
 function transportSector(transport: string | undefined): number {
@@ -1904,6 +2258,21 @@ function xorshift(input: number): number {
 
 function unitFromInteger(value: number): number {
   return (value >>> 0) / 0xffffffff;
+}
+
+function qualityTierForPreset(preset: SettingsState['preset']): QualityTier {
+  switch (preset) {
+    case 'lowest':
+      return 'still';
+    case 'low':
+      return 'efficient';
+    case 'medium':
+      return 'balanced';
+    case 'high':
+    case 'highest':
+    case 'auto':
+      return 'cinema';
+  }
 }
 
 function countVisibleRenderables(scene: Scene): number {

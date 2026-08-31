@@ -4,6 +4,9 @@ const MIN_CAMERA_DISTANCE = 28;
 // reachable through orbiting and the anchored picker, while the host star
 // keeps its visual weight at every density.
 const MAX_CAMERA_DISTANCE = 180;
+// Automatic framing stays closer than the manual travel envelope so the
+// observatory core keeps visual weight while distant peers remain explorable.
+const MAX_AUTO_CAMERA_DISTANCE = 150;
 // Keep the observatory core visually present on narrow screens. The distance
 // is still derived from the full peer field; this is only a guard against a
 // single outer observation making every node a pinprick.
@@ -54,6 +57,17 @@ export function capPortraitDistance(distance: number, aspect: number): number {
   return Number.isFinite(aspect) && aspect < 0.72
     ? Math.min(PORTRAIT_FOCAL_MAX_DISTANCE, safeDistance)
     : safeDistance;
+}
+
+/** Keep automatic composition closer without restricting manual exploration. */
+export function capAutoCameraDistance(
+  distance: number,
+  aspect: number,
+): number {
+  return Math.min(
+    MAX_AUTO_CAMERA_DISTANCE,
+    capPortraitDistance(distance, aspect),
+  );
 }
 
 /** Find the furthest point from the local browser origin in a packed XYZ view. */
@@ -108,4 +122,5 @@ export function fitCompositionRadius(points: ArrayLike<number>): number {
 
 export const CAMERA_MIN_DISTANCE = MIN_CAMERA_DISTANCE;
 export const CAMERA_MAX_DISTANCE = MAX_CAMERA_DISTANCE;
+export const CAMERA_AUTO_MAX_DISTANCE = MAX_AUTO_CAMERA_DISTANCE;
 export const CAMERA_PORTRAIT_MAX_DISTANCE = PORTRAIT_FOCAL_MAX_DISTANCE;

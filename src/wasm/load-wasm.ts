@@ -1,4 +1,8 @@
 import type { PeerRecord, PeerSource, PeerStatus } from '../network/peer-types';
+import {
+  MAX_PEER_WORLD_RADIUS,
+  MIN_PEER_WORLD_RADIUS,
+} from '../scene/spatial-scale';
 
 type WasmNumberFunction = (...arguments_: number[]) => number;
 
@@ -74,7 +78,10 @@ export async function loadPhysicsWasm(
       seedNode(
         Math.trunc(index),
         Math.trunc(seed),
-        Math.min(76, Math.max(8, finiteOr(radius, 40))),
+        Math.min(
+          MAX_PEER_WORLD_RADIUS,
+          Math.max(MIN_PEER_WORLD_RADIUS, finiteOr(radius, 40)),
+        ),
         Math.min(4, Math.max(0, Math.trunc(finiteOr(sector, 4)))),
       );
     },
