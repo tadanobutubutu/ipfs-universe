@@ -574,31 +574,41 @@ test('exercises adaptive quality recovery in a real browser runtime', async ({
 }) => {
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-scene', 'ready');
-  const result = await page.evaluate(async () => {
-    const moduleUrl = new URL(
-      '/src/scene/quality-policy.ts',
-      window.location.origin,
-    );
-    const { QualityPolicy } = (await import(
-      moduleUrl.href
-    )) as typeof import('../../src/scene/quality-policy');
-    const policy = new QualityPolicy();
-    policy.observe({ frameP95Ms: 28 });
-    const downgrade = policy.observe({ frameP95Ms: 28 });
-    policy.observe({ frameP95Ms: 8 });
-    policy.observe({ frameP95Ms: 8 });
-    const recovery = policy.observe({ frameP95Ms: 8 });
+  const result = await page.evaluate(() => {
+    const observe = (
+      window as Window & {
+        __peerstellationObserveQuality?: (sample: {
+          frameP95Ms: number;
+          frameMaxMs?: number;
+        }) => void;
+      }
+    ).__peerstellationObserveQuality;
+    if (observe === undefined)
+      throw new Error('quality fixture is unavailable');
+    observe({ frameP95Ms: 28 });
+    observe({ frameP95Ms: 28 });
+    const downgraded =
+      document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset;
+    const downgradeTier = downgraded?.qualityTier;
+    const downgradePixelRatio = downgraded?.pixelRatio;
+    observe({ frameP95Ms: 8 });
+    observe({ frameP95Ms: 8 });
+    observe({ frameP95Ms: 8 });
+    const recovered =
+      document.querySelector<HTMLCanvasElement>('#universe-canvas')?.dataset;
     return {
-      downgrade: downgrade.tier,
-      recovery: recovery.tier,
-      reason: recovery.reason,
+      downgrade: downgradeTier,
+      downgradePixelRatio,
+      recovery: recovered?.qualityTier,
+      recoveryPixelRatio: recovered?.pixelRatio,
     };
   });
 
   expect(result).toEqual({
     downgrade: 'balanced',
+    downgradePixelRatio: '0.86',
     recovery: 'cinema',
-    reason: 'recovered',
+    recoveryPixelRatio: '1.00',
   });
 });
 

@@ -55,7 +55,11 @@ import {
 } from './camera-fit';
 import { frameElapsedMs, simulationDeltaSeconds } from './frame-stats';
 import { gpuDurationStats, normalizeGpuDuration } from './gpu-timing';
-import { QualityPolicy } from './quality-policy';
+import {
+  type QualityDecision,
+  QualityPolicy,
+  type QualitySample,
+} from './quality-policy';
 
 const SCENE_NODE_LIMIT = 1_024;
 const MAX_EXPECTED_DRAW_CALLS_PER_FRAME = 128;
@@ -69,6 +73,7 @@ export interface UniverseScene {
   readonly rendererName: string;
   attachPhysics(physics: PhysicsWasm): void;
   setPeers(peers: readonly PeerRecord[]): void;
+  observeQuality(sample: QualitySample): QualityDecision;
   onNodeInteraction(
     listener: (interaction: NodeInteraction) => void,
   ): () => void;
@@ -418,6 +423,20 @@ class ThreeUniverseScene implements UniverseScene {
       this.#advanceArrivals(0);
       this.#renderScene();
     }
+  }
+
+  observeQuality(sample: QualitySample): QualityDecision {
+    const decision = this.#qualityPolicy.observe(sample);
+    this.#canvas.dataset.qualityTier = decision.tier;
+    if (decision.changed) {
+      this.#pixelRatio = Math.min(
+        this.#basePixelRatio,
+        Math.max(0.55, this.#basePixelRatio * decision.pixelRatioScale),
+      );
+      this.#applyQualityTier(decision.tier);
+      this.#resize();
+    }
+    return decision;
   }
 
   onNodeInteraction(
@@ -983,6 +1002,7 @@ class ThreeUniverseScene implements UniverseScene {
     const width = Math.max(1, this.#canvas.clientWidth);
     const height = Math.max(1, this.#canvas.clientHeight);
     this.#renderer.setPixelRatio(this.#pixelRatio);
+    this.#canvas.dataset.pixelRatio = this.#pixelRatio.toFixed(2);
     this.#renderer.setSize(width, height, false);
     this.#camera.aspect = width / height;
     this.#lookTarget.x = width >= 900 ? -6 : 0;
@@ -1188,19 +1208,10 @@ class ThreeUniverseScene implements UniverseScene {
     this.#canvas.dataset.frameP50 = frameStats.p50.toFixed(2);
     this.#canvas.dataset.frameP95 = frameStats.p95.toFixed(2);
     this.#canvas.dataset.frameMax = frameStats.max.toFixed(2);
-    const qualityDecision = this.#qualityPolicy.observe({
+    this.observeQuality({
       frameP95Ms: frameStats.p95,
       frameMaxMs: frameStats.max,
     });
-    this.#canvas.dataset.qualityTier = qualityDecision.tier;
-    if (qualityDecision.changed) {
-      this.#pixelRatio = Math.min(
-        this.#basePixelRatio,
-        Math.max(0.55, this.#basePixelRatio * qualityDecision.pixelRatioScale),
-      );
-      this.#applyQualityTier(qualityDecision.tier);
-      this.#resize();
-    }
     const infoDrawCalls = this.#renderer.info.render.calls;
     // WebGLRenderer resets this counter per frame, while the common WebGPU
     // renderer may expose a monotonically accumulated value. Normalize both
