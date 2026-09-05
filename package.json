@@ -67,6 +67,6 @@
     "three": "0.185.1"
   },
   "overrides": {
-    "@node-datachannel/android-arm64": "0.33.0"
+    "@node-datachannel/android-arm64": "0.33.2"
   }
 }
